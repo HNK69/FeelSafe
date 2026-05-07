@@ -343,26 +343,66 @@ export default function Emergency() {
                   <MapPin className="w-4 h-4 text-[#00FF9D]" />
                   <span className="text-[#00FF9D]">Nearby Safety</span>
                   {loadingAnchors && <Loader2 className="w-3 h-3 animate-spin text-gray-400 ml-auto" />}
+                  {anchors && !loadingAnchors && (
+                    <span className="ml-auto text-[10px] text-gray-500">{anchors.total_found} found</span>
+                  )}
                 </h3>
                 {anchors && (
-                  <div className="space-y-1.5">
-                    {(['police','hospital','pharmacy','supermarket']).flatMap(type => {
-                      const cfg = { police:'🚔', hospital:'🏥', pharmacy:'💊', supermarket:'🛒' };
-                      return (anchors.anchors?.[type] || []).slice(0,2).map((item, i) => (
-                        <div key={`${type}-${i}`} className="flex items-center justify-between text-xs p-2 bg-black/30 rounded-xl">
-                          <span>{cfg[type]} {item.name}</span>
-                          <span className="text-gray-400 ml-2 flex-shrink-0">{item.distance_km} km</span>
+                  <div className="space-y-2">
+                    {(['police','hospital','pharmacy','metro_station','public_safe_zone']).flatMap(type => {
+                      const cfg = {
+                        police:           { icon: '🚔', color: '#3B82F6', label: 'Police' },
+                        hospital:         { icon: '🏥', color: '#EF4444', label: 'Hospital' },
+                        pharmacy:         { icon: '💊', color: '#8B5CF6', label: 'Pharmacy' },
+                        metro_station:    { icon: '🚇', color: '#F59E0B', label: 'Metro' },
+                        public_safe_zone: { icon: '🛡', color: '#00FF9D', label: 'Safe Zone' },
+                      }[type] || { icon: '📍', color: '#FFC857', label: type };
+                      return (anchors.anchors?.[type] || []).slice(0, 2).map((item, i) => (
+                        <div key={`${type}-${i}`}
+                          className="p-2.5 bg-black/30 rounded-xl border border-gray-800 hover:border-gray-600 transition-colors">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-base flex-shrink-0">{item.icon || cfg.icon}</span>
+                              <div className="min-w-0">
+                                <div className="text-xs font-bold text-white truncate">{item.name}</div>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold"
+                                    style={{ background: `${cfg.color}22`, color: cfg.color }}>
+                                    {cfg.label}
+                                  </span>
+                                  <span className="text-[10px] text-gray-500">{item.distance_km} km</span>
+                                  {item.open_24x7 && (
+                                    <span className="text-[10px] text-[#00FF9D]">24/7</span>
+                                  )}
+                                </div>
+                                {item.address && (
+                                  <div className="text-[10px] text-gray-600 truncate mt-0.5">{item.address}</div>
+                                )}
+                              </div>
+                            </div>
+                            <a href={item.navigate_url || `https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lon}`}
+                              target="_blank" rel="noreferrer"
+                              className="flex-shrink-0 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-colors"
+                              style={{ background: '#00FF9D22', color: '#00FF9D', border: '1px solid #00FF9D44' }}
+                              onMouseEnter={e => { e.target.style.background='#00FF9D'; e.target.style.color='#000'; }}
+                              onMouseLeave={e => { e.target.style.background='#00FF9D22'; e.target.style.color='#00FF9D'; }}>
+                              🧭 Go
+                            </a>
+                          </div>
                         </div>
                       ));
                     })}
                     {anchors.total_found === 0 && !loadingAnchors && (
-                      <p className="text-xs text-gray-500 text-center py-1">No results nearby — try a wider radius</p>
+                      <p className="text-xs text-gray-500 text-center py-2">
+                        Searching wider area...
+                      </p>
                     )}
                   </div>
                 )}
               </motion.div>
             )}
           </AnimatePresence>
+
 
           {/* Emergency Contacts */}
           <div className="w-full glass p-4 rounded-2xl">

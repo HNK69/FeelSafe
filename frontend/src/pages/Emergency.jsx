@@ -73,9 +73,21 @@ export default function Emergency() {
 
   const loadAnchors = async (lat, lon) => {
     setLoadingAnchors(true);
-    const res = await getSafetyAnchors(lat, lon, 1500);
-    if (res?.success) setAnchors(res);
-    setLoadingAnchors(false);
+    setAnchors(null);  // clear stale data before each fetch
+    try {
+      const res = await getSafetyAnchors(lat, lon, 2000);
+      if (res?.success && res.total_found > 0) {
+        setAnchors(res);
+      } else {
+        // Widen and retry once
+        const res2 = await getSafetyAnchors(lat, lon, 5000);
+        setAnchors(res2?.success ? res2 : { success: true, anchors: {}, total_found: 0 });
+      }
+    } catch {
+      setAnchors({ success: true, anchors: {}, total_found: 0 });
+    } finally {
+      setLoadingAnchors(false);
+    }
   };
 
   // ── Auto emergency recording (30s) ─────────────────────────────────────────

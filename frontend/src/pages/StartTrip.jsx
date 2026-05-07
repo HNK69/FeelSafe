@@ -185,9 +185,11 @@ export default function StartTrip() {
     try {
       const res = await startTrip(src.lat, src.lon, dest.lat, dest.lon, srcKey, dstKey, 1);
       setActiveTrip(res?.trip || { id: null, eta_minutes: 25 });
-      const wps = route?.waypoints?.map(w => [w.lat, w.lon]) || [
+      // Always bookend with actual selected src/dest, use route intermediates in between
+      const intermediates = route?.waypoints?.map(w => [w.lat, w.lon]) || [];
+      const wps = [
         [src.lat, src.lon],
-        [(src.lat + dest.lat) / 2, (src.lon + dest.lon) / 2],
+        ...intermediates,
         [dest.lat, dest.lon],
       ];
       wayptsRef.current = wps;
@@ -595,12 +597,29 @@ export default function StartTrip() {
           <MapView
             source={src ? [src.lat, src.lon] : null}
             destination={dest ? [dest.lat, dest.lon] : null}
-            routeCoordinates={
-              step === STEP.TRACKING ? wayptsRef.current :
-              step === STEP.ROUTES && allRoutes[0]?.waypoints
-                ? allRoutes[0].waypoints.map(w => [w.lat, w.lon])
-                : []
-            }
+            routeCoordinates={(() => {
+              const srcPt  = src  ? [src.lat,  src.lon]  : null;
+              const dstPt  = dest ? [dest.lat, dest.lon] : null;
+              if (step === STEP.TRACKING) {
+                // Use waypoints from simulation (already bookended)
+                return wayptsRef.current;
+              }
+              if (step === STEP.ROUTES && allRoutes[0]) {
+                // Use intermediate waypoints from matched route, but ALWAYS
+                // bookend with the actual selected src/dest coordinates
+                const intermediates = (allRoutes[0].waypoints || [])
+                  .map(w => [w.lat, w.lon])
+                  .filter(c => c[0] != null);
+                const pts = [
+                  srcPt,
+                  ...intermediates,
+                  dstPt,
+                ].filter(Boolean);
+                return pts.length >= 2 ? pts : [srcPt, dstPt].filter(Boolean);
+              }
+              // INPUT step: just show src→dest straight line
+              return srcPt && dstPt ? [srcPt, dstPt] : [];
+            })()}
             altRoutes={
               step === STEP.ROUTES
                 ? allRoutes.slice(1).map((r, i) => ({

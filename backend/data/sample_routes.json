@@ -15,7 +15,8 @@
     "unsafe_report_count": 1,
     "nearby_police": true,
     "nearby_hospital": true,
-    "tags": ["well_lit", "busy_road", "cctv_present"]
+    "tags": ["well_lit", "busy_road", "cctv_present"],
+    "description": "Major road through central Delhi — busy, well-monitored, and recommended for solo travel"
   },
   {
     "id": "route_002",
@@ -32,7 +33,8 @@
     "unsafe_report_count": 3,
     "nearby_police": true,
     "nearby_hospital": false,
-    "tags": ["busy_road", "ring_road", "moderate_lighting"]
+    "tags": ["busy_road", "ring_road", "moderate_lighting"],
+    "description": "Ring road route with police presence but moderate crowd density after 9 PM"
   },
   {
     "id": "route_003",
@@ -49,11 +51,12 @@
     "unsafe_report_count": 7,
     "nearby_police": false,
     "nearby_hospital": false,
-    "tags": ["isolated_stretch", "poor_lighting", "late_night_risk"]
+    "tags": ["isolated_stretch", "poor_lighting", "late_night_risk"],
+    "description": "Route passes through a known isolated stretch with multiple community safety concerns"
   },
   {
     "id": "route_004",
-    "name": "Saket to Hauz Khas Safe Route",
+    "name": "Saket to Hauz Khas Safe Corridor",
     "origin": { "lat": 28.5254, "lon": 77.2091, "name": "Saket" },
     "destination": { "lat": 28.5495, "lon": 77.2065, "name": "Hauz Khas" },
     "distance_km": 4.1,
@@ -66,11 +69,12 @@
     "unsafe_report_count": 0,
     "nearby_police": true,
     "nearby_hospital": true,
-    "tags": ["well_lit", "busy_market", "cctv_present", "recommended"]
+    "tags": ["well_lit", "busy_market", "cctv_present", "recommended"],
+    "description": "Premium safe corridor — highest community trust, active CCTV, zero incident reports"
   },
   {
     "id": "route_005",
-    "name": "Dwarka Sector 10 to Airport",
+    "name": "Dwarka Sector 10 to IGI Airport",
     "origin": { "lat": 28.5820, "lon": 77.0490, "name": "Dwarka Sector 10" },
     "destination": { "lat": 28.5562, "lon": 77.0998, "name": "IGI Airport T3" },
     "distance_km": 9.3,
@@ -83,6 +87,148 @@
     "unsafe_report_count": 2,
     "nearby_police": true,
     "nearby_hospital": true,
-    "tags": ["airport_road", "well_lit", "heavy_traffic"]
+    "tags": ["airport_road", "well_lit", "heavy_traffic"],
+    "description": "Airport expressway with continuous traffic and police checkpoints — safe even at night"
+  },
+  {
+    "id": "route_006",
+    "name": "Rohini Sector 3 to Pitampura Market",
+    "origin": { "lat": 28.7140, "lon": 77.1160, "name": "Rohini Sector 3" },
+    "destination": { "lat": 28.7015, "lon": 77.1330, "name": "Pitampura Market" },
+    "distance_km": 3.5,
+    "waypoints": [
+      { "lat": 28.7100, "lon": 77.1230 },
+      { "lat": 28.7060, "lon": 77.1280 }
+    ],
+    "is_isolated": false,
+    "community_rating": 4.3,
+    "unsafe_report_count": 1,
+    "nearby_police": true,
+    "nearby_hospital": false,
+    "tags": ["well_lit", "busy_road", "cctv_present"],
+    "description": "Short residential route with strong community feedback and active street lights"
+  },
+  {
+    "id": "route_007",
+    "name": "Lajpat Nagar to Okhla Industrial Area",
+    "origin": { "lat": 28.5677, "lon": 77.2433, "name": "Lajpat Nagar" },
+    "destination": { "lat": 28.5350, "lon": 77.2730, "name": "Okhla Phase 2" },
+    "distance_km": 6.8,
+    "waypoints": [
+      { "lat": 28.5560, "lon": 77.2530 },
+      { "lat": 28.5450, "lon": 77.2640 }
+    ],
+    "is_isolated": false,
+    "community_rating": 3.2,
+    "unsafe_report_count": 4,
+    "nearby_police": false,
+    "nearby_hospital": false,
+    "tags": ["moderate_lighting", "busy_road"],
+    "description": "Route through industrial zone — safe during daytime but caution advised after sunset"
+  },
+  {
+    "id": "route_008",
+    "name": "GTB Nagar to Mukherjee Nagar",
+    "origin": { "lat": 28.6920, "lon": 77.2050, "name": "GTB Nagar" },
+    "destination": { "lat": 28.7020, "lon": 77.1890, "name": "Mukherjee Nagar" },
+    "distance_km": 2.8,
+    "waypoints": [
+      { "lat": 28.6960, "lon": 77.1980 }
+    ],
+    "is_isolated": false,
+    "community_rating": 4.4,
+    "unsafe_report_count": 0,
+    "nearby_police": true,
+    "nearby_hospital": false,
+    "tags": ["well_lit", "busy_road", "recommended"],
+    "description": "Popular student route — very high footfall, well lit, and regularly patrolled"
+  },
+  {
+    "id": "route_009",
+    "name": "Noida Sector 62 to Sector 18 via Expressway",
+    "origin": { "lat": 28.6270, "lon": 77.3650, "name": "Noida Sector 62" },
+    "destination": { "lat": 28.5700, "lon": 77.3220, "name": "Noida Sector 18" },
+    "distance_km": 10.1,
+    "waypoints": [
+      { "lat": 28.6050, "lon": 77.3520 },
+      { "lat": 28.5880, "lon": 77.3380 }
+    ],
+    "is_isolated": false,
+    "community_rating": 3.8,
+    "unsafe_report_count": 2,
+    "nearby_police": true,
+    "nearby_hospital": true,
+    "tags": ["heavy_traffic", "well_lit", "airport_road"],
+    "description": "Expressway route with CCTV and police checkpoints — reliable and relatively safe"
+  },
+  {
+    "id": "route_010",
+    "name": "Vasant Kunj to Mehrauli via Dark Road",
+    "origin": { "lat": 28.5219, "lon": 77.1560, "name": "Vasant Kunj" },
+    "destination": { "lat": 28.5231, "lon": 77.1868, "name": "Mehrauli" },
+    "distance_km": 5.2,
+    "waypoints": [
+      { "lat": 28.5210, "lon": 77.1680 },
+      { "lat": 28.5220, "lon": 77.1780 }
+    ],
+    "is_isolated": true,
+    "community_rating": 2.8,
+    "unsafe_report_count": 5,
+    "nearby_police": false,
+    "nearby_hospital": false,
+    "tags": ["isolated_stretch", "poor_lighting", "dark_stretch"],
+    "description": "Poorly lit stretch passing near Mehrauli archaeological zone — avoid at night"
+  },
+  {
+    "id": "route_011",
+    "name": "Janakpuri West to Tilak Nagar",
+    "origin": { "lat": 28.6300, "lon": 77.0800, "name": "Janakpuri West" },
+    "destination": { "lat": 28.6430, "lon": 77.1010, "name": "Tilak Nagar" },
+    "distance_km": 4.4,
+    "waypoints": [
+      { "lat": 28.6360, "lon": 77.0900 }
+    ],
+    "is_isolated": false,
+    "community_rating": 4.2,
+    "unsafe_report_count": 1,
+    "nearby_police": true,
+    "nearby_hospital": false,
+    "tags": ["well_lit", "busy_road", "cctv_present"],
+    "description": "Busy West Delhi corridor — active commercial district with good visibility throughout"
+  },
+  {
+    "id": "route_012",
+    "name": "Shahdara to Preet Vihar via DND",
+    "origin": { "lat": 28.6700, "lon": 77.2970, "name": "Shahdara" },
+    "destination": { "lat": 28.6380, "lon": 77.2960, "name": "Preet Vihar" },
+    "distance_km": 8.6,
+    "waypoints": [
+      { "lat": 28.6580, "lon": 77.2970 },
+      { "lat": 28.6480, "lon": 77.2960 }
+    ],
+    "is_isolated": false,
+    "community_rating": 2.5,
+    "unsafe_report_count": 8,
+    "nearby_police": false,
+    "nearby_hospital": false,
+    "tags": ["poor_lighting", "isolated_stretch"],
+    "description": "Route passes near a high-risk zone — multiple reports of harassment near Shahdara flyover"
+  },
+  {
+    "id": "route_013",
+    "name": "Connaught Place to Karol Bagh Express",
+    "origin": { "lat": 28.6315, "lon": 77.2167, "name": "Connaught Place" },
+    "destination": { "lat": 28.6514, "lon": 77.1907, "name": "Karol Bagh" },
+    "distance_km": 3.8,
+    "waypoints": [
+      { "lat": 28.6400, "lon": 77.2050 }
+    ],
+    "is_isolated": false,
+    "community_rating": 4.5,
+    "unsafe_report_count": 0,
+    "nearby_police": true,
+    "nearby_hospital": true,
+    "tags": ["well_lit", "busy_road", "cctv_present", "recommended"],
+    "description": "Short central Delhi corridor — constant traffic, camera coverage, and police presence"
   }
 ]

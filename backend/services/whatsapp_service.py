@@ -1,8 +1,8 @@
 """
 services/whatsapp_service.py
 =============================
-Generates WhatsApp emergency sharing links.
-Uses the wa.me deep-link format — no API key required.
+Generates WhatsApp deep-links. No API key required (wa.me format).
+Now supports threat context in emergency messages.
 """
 
 import urllib.parse
@@ -16,57 +16,53 @@ def generate_emergency_link(
     contact_phone: str = None,
     custom_message: str = None,
     user_name: str = "FeelSafe User",
+    threat_text: str = "",
+    risk_level: str = "HIGH",
 ) -> dict:
     """
     Generate a WhatsApp emergency sharing link.
 
-    If `contact_phone` is provided, the link opens a chat with that specific
-    contact. Otherwise it uses the generic wa.me share format.
-
     Args:
-        lat:            Current latitude (used to build a Google Maps link).
-        lon:            Current longitude.
-        contact_phone:  Optional phone number with country code (e.g. "+919876543210").
-        custom_message: Override the default emergency message.
+        lat, lon:       Current GPS coordinates.
+        contact_phone:  Optional phone number (with country code).
+        custom_message: Override the default message.
         user_name:      Name to include in the message.
+        threat_text:    The situation text that triggered the alert.
+        risk_level:     "LOW" | "MEDIUM" | "HIGH"
 
     Returns:
-        {
-            "whatsapp_link": str,   # URL to open WhatsApp
-            "message_text":  str,   # The plain-text message
-            "maps_link":     str,   # Google Maps link to location
-        }
+        { whatsapp_link, message_text, maps_link }
     """
     maps_link = f"https://www.google.com/maps?q={lat},{lon}"
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    risk_emoji = {"LOW": "⚠️", "MEDIUM": "⚠️ ⚠️", "HIGH": "🚨 EMERGENCY"}.get(risk_level, "🚨")
+
     if custom_message:
         message_text = custom_message
     else:
-        # Build a clear, actionable emergency message
+        threat_line = f"\nDetected Threat: \"{threat_text}\"" if threat_text else ""
         message_text = (
-            f"🚨 *EMERGENCY ALERT* 🚨\n"
-            f"*{user_name}* needs immediate help!\n\n"
-            f"📍 *Live Location:* {maps_link}\n"
-            f"🕐 *Time:* {timestamp}\n\n"
-            f"Please contact me or call emergency services:\n"
+            f"{risk_emoji} FEELSAFE ALERT\n\n"
+            f"*{user_name}* may be in danger!\n"
+            f"*Risk Level: {risk_level}*{threat_line}\n\n"
+            f"📍 Live Location:\n{maps_link}\n\n"
+            f"🕐 Time: {timestamp}\n\n"
+            f"Emergency Numbers:\n"
             f"• Police: {EMERGENCY_NUMBERS['police']}\n"
             f"• Ambulance: {EMERGENCY_NUMBERS['ambulance']}\n"
             f"• Women Helpline: {EMERGENCY_NUMBERS['women_helpline']}\n"
             f"• National Emergency: {EMERGENCY_NUMBERS['national_emergency']}\n\n"
-            f"_Sent via FeelSafe — Safe Return Assistant_"
+            f"_Sent via FeelSafe AI — Safe Return Assistant_"
         )
 
-    encoded_message = urllib.parse.quote(message_text)
-
-    if contact_phone:
-        # Direct chat to a specific number
-        # Strip non-numeric characters except leading +
-        clean_phone = "".join(c for c in contact_phone if c.isdigit())
-        whatsapp_link = f"https://wa.me/{clean_phone}?text={encoded_message}"
-    else:
-        # Generic share link (user picks contact in WhatsApp)
-        whatsapp_link = f"https://wa.me/?text={encoded_message}"
+    encoded      = urllib.parse.quote(message_text)
+    clean_phone  = "".join(c for c in (contact_phone or "") if c.isdigit())
+    whatsapp_link = (
+        f"https://wa.me/{clean_phone}?text={encoded}"
+        if clean_phone else
+        f"https://wa.me/?text={encoded}"
+    )
 
     return {
         "whatsapp_link": whatsapp_link,
@@ -76,42 +72,28 @@ def generate_emergency_link(
 
 
 def generate_check_in_link(
-    lat: float,
-    lon: float,
+    lat: float, lon: float,
     contact_phone: str,
     user_name: str = "FeelSafe User",
     eta_minutes: float = None,
 ) -> dict:
-    """
-    Generate a non-emergency WhatsApp check-in link (e.g. "I've started my trip").
-
-    Args:
-        lat, lon:       Current position.
-        contact_phone:  Recipient phone number with country code.
-        user_name:      Sender's name.
-        eta_minutes:    Optional ETA to include in the message.
-
-    Returns:
-        Same dict structure as `generate_emergency_link`.
-    """
-    maps_link = f"https://www.google.com/maps?q={lat},{lon}"
-    eta_str   = f"{eta_minutes:.0f} min" if eta_minutes else "unknown"
+    """Non-emergency trip-start check-in link."""
+    maps_link  = f"https://www.google.com/maps?q={lat},{lon}"
+    eta_str    = f"{eta_minutes:.0f} min" if eta_minutes else "unknown"
 
     message_text = (
-        f"👋 Hi! *{user_name}* has started a trip via FeelSafe.\n\n"
+        f"Hi! *{user_name}* has started a trip via FeelSafe.\n\n"
         f"📍 Starting location: {maps_link}\n"
-        f"🕐 ETA: ~{eta_str}\n\n"
+        f"ETA: ~{eta_str}\n\n"
         f"They will share updates. If you don't hear from them, "
         f"please check in or call {EMERGENCY_NUMBERS['police']}.\n\n"
         f"_FeelSafe — Safe Return Assistant_"
     )
 
-    encoded_message = urllib.parse.quote(message_text)
-    clean_phone     = "".join(c for c in contact_phone if c.isdigit())
-    whatsapp_link   = f"https://wa.me/{clean_phone}?text={encoded_message}"
-
+    encoded     = urllib.parse.quote(message_text)
+    clean_phone = "".join(c for c in contact_phone if c.isdigit())
     return {
-        "whatsapp_link": whatsapp_link,
+        "whatsapp_link": f"https://wa.me/{clean_phone}?text={encoded}",
         "message_text":  message_text,
         "maps_link":     maps_link,
     }

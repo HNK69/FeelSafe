@@ -1,212 +1,350 @@
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { MapPin, Navigation, Play, UserPlus, Loader2 } from 'lucide-react';
+// pages/StartTrip.jsx
+// Unified trip start + SafeRoute selection flow.
+// STEP 1: Enter source/dest → STEP 2: See route options → STEP 3: Select → Trip starts
+
+import { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { MapPin, Navigation, Play, Square, Loader2, BrainCircuit, Shield, AlertTriangle, ChevronRight, Check } from 'lucide-react';
 import MapView from '../components/MapView';
 import ThreatBox from '../components/ThreatBox';
-import { startTrip } from '../services/api';
+import { getSafestRoute, startTrip, endTrip, analyzeThreat } from '../services/api';
+
+// Fixed Delhi-area coordinates for demo
+const LOCATION_PRESETS = {
+  'New Delhi Station':   { lat: 28.6429, lon: 77.2191 },
+  'Connaught Place':     { lat: 28.6315, lon: 77.2167 },
+  'Lajpat Nagar':        { lat: 28.5677, lon: 77.2433 },
+  'Hauz Khas':           { lat: 28.5495, lon: 77.2065 },
+  'Saket':               { lat: 28.5254, lon: 77.2091 },
+  'Karol Bagh':          { lat: 28.6514, lon: 77.1907 },
+  'AIIMS':               { lat: 28.5672, lon: 77.2100 },
+  'Noida Sector 18':     { lat: 28.5355, lon: 77.3910 },
+};
+
+const STEP = { INPUT: 'INPUT', ROUTES: 'ROUTES', TRACKING: 'TRACKING' };
+
+const riskColor = { LOW: '#00FF9D', MEDIUM: '#FFC857', HIGH: '#FF3B5C' };
 
 export default function StartTrip() {
-  const [isTracking, setIsTracking] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [tripData, setTripData] = useState(null);
+  const [step, setStep]           = useState(STEP.INPUT);
+  const [sourceKey, setSourceKey] = useState('New Delhi Station');
+  const [destKey, setDestKey]     = useState('Lajpat Nagar');
+  const [loadingRoutes, setLoadingRoutes] = useState(false);
+  const [routeData, setRouteData] = useState(null);
+  const [selectedRoute, setSelectedRoute] = useState(null);
+  const [activeTrip, setActiveTrip] = useState(null);
+  const [currentPos, setCurrentPos]   = useState(null);
+  const [threatInput, setThreatInput] = useState('');
+  const [threatResult, setThreatResult] = useState(null);
+  const [analyzingThreat, setAnalyzingThreat] = useState(false);
+  const [liveRisk, setLiveRisk] = useState('LOW');
 
-  const [sourceInput, setSourceInput] = useState('New Delhi Station');
-  const [destInput, setDestInput] = useState('Connaught Place');
+  const trackIntervalRef = useRef(null);
+  const routeWaypointsRef = useRef([]);
 
-  // Hardcoded coordinates for the simulation since we don't have a geocoder API right now
-  const sourceCoords = [28.6429, 77.2191]; // New Delhi
-  const destCoords = [28.6304, 77.2177];   // Connaught Place
-  const routeCoords = [
-    sourceCoords,
-    [28.6400, 77.2185],
-    [28.6380, 77.2180],
-    [28.6350, 77.2175],
-    destCoords
-  ];
+  const src  = LOCATION_PRESETS[sourceKey];
+  const dest = LOCATION_PRESETS[destKey];
 
-  const [currentPosition, setCurrentPosition] = useState(null);
-
-  // Animation logic
-  useEffect(() => {
-    let interval;
-    if (isTracking) {
-      let progress = 0;
-      setCurrentPosition(routeCoords[0]);
-      
-      interval = setInterval(() => {
-        progress += 0.05; // 5% per tick
-        if (progress >= 1) {
-          progress = 1;
-          clearInterval(interval);
-        }
-        
-        // Simple linear interpolation across the whole route 
-        // (for a hackathon this creates a realistic enough moving effect)
-        const totalSegments = routeCoords.length - 1;
-        const segmentIndex = Math.floor(progress * totalSegments);
-        const segmentProgress = (progress * totalSegments) - segmentIndex;
-        
-        if (segmentIndex < totalSegments) {
-          const startPt = routeCoords[segmentIndex];
-          const endPt = routeCoords[segmentIndex + 1];
-          const lat = startPt[0] + (endPt[0] - startPt[0]) * segmentProgress;
-          const lng = startPt[1] + (endPt[1] - startPt[1]) * segmentProgress;
-          setCurrentPosition([lat, lng]);
-        } else {
-          setCurrentPosition(routeCoords[routeCoords.length - 1]);
-        }
-      }, 1000); // Update every second
-    } else {
-      setCurrentPosition(null);
-    }
-
-    return () => clearInterval(interval);
-  }, [isTracking]);
-
-  const handleStartTrip = async () => {
-    if (isTracking) {
-      setIsTracking(false);
-      setTripData(null);
-      setCurrentPosition(null);
-      return;
-    }
-
-    if (!sourceInput || !destInput) {
-      alert("Please enter both source and destination.");
-      return;
-    }
-
-    setIsLoading(true);
+  // ── Step 1 → Step 2: Fetch routes ─────────────────────────────────────────
+  const handleAnalyzeRoutes = async () => {
+    if (!src || !dest) return;
+    setLoadingRoutes(true);
     try {
-      const data = await startTrip({
-        source: sourceInput,
-        destination: destInput,
-        user_id: 'user-123'
-      });
-      setTripData(data);
-      setIsTracking(true);
-    } catch (error) {
-      console.error(error);
-      alert('Failed to start trip.');
+      const data = await getSafestRoute(src.lat, src.lon, dest.lat, dest.lon);
+      setRouteData(data);
+      setStep(STEP.ROUTES);
+    } catch (e) {
+      console.error(e);
     } finally {
-      setIsLoading(false);
+      setLoadingRoutes(false);
     }
   };
 
+  // ── Step 2 → Step 3: Start trip after route selection ─────────────────────
+  const handleStartTrip = async (route) => {
+    setSelectedRoute(route);
+    try {
+      const trip = await startTrip(src.lat, src.lon, dest.lat, dest.lon, sourceKey, destKey, 1);
+      setActiveTrip(trip?.trip || { id: 1, eta_minutes: 25, status: 'ACTIVE' });
+
+      // Build waypoints from selected route or generate synthetic ones
+      const wps = route?.waypoints?.map(w => [w.lat, w.lon]) || [
+        [src.lat, src.lon],
+        [(src.lat + dest.lat) / 2, (src.lon + dest.lon) / 2],
+        [dest.lat, dest.lon],
+      ];
+      routeWaypointsRef.current = wps;
+      setCurrentPos(wps[0]);
+      setStep(STEP.TRACKING);
+      startPositionSimulation(wps);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // ── Animated position simulation ──────────────────────────────────────────
+  const startPositionSimulation = (waypoints) => {
+    let progress = 0;
+    clearInterval(trackIntervalRef.current);
+    trackIntervalRef.current = setInterval(() => {
+      progress += 0.02;
+      if (progress >= 1) { clearInterval(trackIntervalRef.current); return; }
+      const total = waypoints.length - 1;
+      const segIdx = Math.floor(progress * total);
+      const segProg = (progress * total) - segIdx;
+      if (segIdx < total) {
+        const s = waypoints[segIdx], e = waypoints[segIdx + 1];
+        setCurrentPos([s[0] + (e[0] - s[0]) * segProg, s[1] + (e[1] - s[1]) * segProg]);
+      }
+    }, 1500);
+  };
+
+  // ── End trip ───────────────────────────────────────────────────────────────
+  const handleEndTrip = async () => {
+    clearInterval(trackIntervalRef.current);
+    if (activeTrip?.id) await endTrip(activeTrip.id).catch(() => {});
+    setStep(STEP.INPUT);
+    setActiveTrip(null);
+    setCurrentPos(null);
+    setThreatResult(null);
+    setLiveRisk('LOW');
+    setRouteData(null);
+    setSelectedRoute(null);
+  };
+
+  // ── Live threat analysis ───────────────────────────────────────────────────
+  const handleThreatAnalysis = async () => {
+    if (!threatInput.trim()) return;
+    setAnalyzingThreat(true);
+    try {
+      const res = await analyzeThreat(
+        threatInput,
+        currentPos ? currentPos[0] : src.lat,
+        currentPos ? currentPos[1] : src.lon,
+        1, 'FeelSafe User', activeTrip?.id
+      );
+      setThreatResult(res);
+      setLiveRisk(res.risk_level || 'LOW');
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setAnalyzingThreat(false);
+    }
+  };
+
+  useEffect(() => () => clearInterval(trackIntervalRef.current), []);
+
+  const routeColor = selectedRoute ? (
+    selectedRoute.safety_score >= 65 ? '#00E5FF' :
+    selectedRoute.safety_score >= 40 ? '#FFC857' : '#FF3B5C'
+  ) : '#00E5FF';
+
   return (
     <div className="min-h-screen px-4 md:px-8 py-8 max-w-6xl mx-auto flex flex-col md:flex-row gap-6">
-      <div className="w-full md:w-1/3 flex flex-col gap-6">
-        <div className="glass p-6 rounded-3xl">
-          <h2 className="text-2xl font-bold mb-6">Setup Trip</h2>
-          
-          <div className="space-y-4 mb-6">
-            <div className="relative">
-              <div className="absolute left-4 top-3 text-[#00E5FF]"><Navigation className="w-5 h-5" /></div>
-              <input 
-                type="text" 
-                value={sourceInput}
-                onChange={(e) => setSourceInput(e.target.value)}
-                placeholder="Current Location" 
-                disabled={isTracking}
-                className="w-full bg-black/50 border border-gray-700 rounded-xl py-3 pl-12 pr-4 text-white focus:outline-none focus:border-[#00E5FF] transition-colors disabled:opacity-50"
-              />
-            </div>
-            <div className="relative">
-              <div className="absolute left-4 top-3 text-[#00FF9D]"><MapPin className="w-5 h-5" /></div>
-              <input 
-                type="text" 
-                value={destInput}
-                onChange={(e) => setDestInput(e.target.value)}
-                placeholder="Destination" 
-                disabled={isTracking}
-                className="w-full bg-black/50 border border-gray-700 rounded-xl py-3 pl-12 pr-4 text-white focus:outline-none focus:border-[#00FF9D] transition-colors disabled:opacity-50"
-              />
-            </div>
-          </div>
 
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={handleStartTrip}
-            disabled={isLoading}
-            className={`w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 text-lg shadow-lg transition-all ${
-              isTracking 
-                ? 'bg-gradient-to-r from-[#FF3B5C] to-red-600 text-white neon-glow-danger' 
-                : 'bg-gradient-to-r from-[#00E5FF] to-[#00FF9D] text-[#0B1020] neon-glow'
-            } disabled:opacity-50`}
-          >
-            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 
-             isTracking ? 'Stop Tracking' : <><Play className="w-5 h-5" fill="currentColor" /> Start Safe Trip</>}
-          </motion.button>
-        </div>
+      {/* ── LEFT PANEL ─────────────────────────────────────────────────────── */}
+      <div className="w-full md:w-2/5 flex flex-col gap-4">
 
-        {isTracking && tripData && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="glass p-6 rounded-3xl border border-[#00FF9D]/30 shadow-[0_0_15px_rgba(0,255,157,0.1)]"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-lg">Live Status</h3>
-              <span className="flex items-center gap-2 text-xs font-bold text-[#00FF9D] bg-[#00FF9D]/10 px-3 py-1 rounded-full border border-[#00FF9D]/20">
-                <span className="w-2 h-2 rounded-full bg-[#00FF9D] animate-pulse"></span>
-                MONITORING
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-black/30 p-4 rounded-xl border border-white/5">
-                <div className="text-gray-400 text-xs uppercase mb-1">ETA</div>
-                <div className="text-xl font-bold text-white">{tripData.eta || '24 mins'}</div>
+        {/* STEP 1: Location Input */}
+        <AnimatePresence mode="wait">
+          {step === STEP.INPUT && (
+            <motion.div key="input" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+              className="glass p-6 rounded-3xl">
+              <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+                <BrainCircuit className="w-6 h-6 text-[#00E5FF]" /> Plan Safe Trip
+              </h2>
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="text-xs text-gray-400 uppercase mb-1 block">From</label>
+                  <div className="relative">
+                    <Navigation className="absolute left-3 top-3 w-5 h-5 text-[#00E5FF]" />
+                    <select value={sourceKey} onChange={e => setSourceKey(e.target.value)}
+                      className="w-full bg-black/50 border border-gray-700 rounded-xl py-3 pl-10 pr-4 text-white focus:outline-none focus:border-[#00E5FF]">
+                      {Object.keys(LOCATION_PRESETS).map(k => <option key={k}>{k}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 uppercase mb-1 block">To</label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-3 w-5 h-5 text-[#00FF9D]" />
+                    <select value={destKey} onChange={e => setDestKey(e.target.value)}
+                      className="w-full bg-black/50 border border-gray-700 rounded-xl py-3 pl-10 pr-4 text-white focus:outline-none focus:border-[#00FF9D]">
+                      {Object.keys(LOCATION_PRESETS).map(k => <option key={k}>{k}</option>)}
+                    </select>
+                  </div>
+                </div>
               </div>
-              <div className="bg-black/30 p-4 rounded-xl border border-white/5">
-                <div className="text-gray-400 text-xs uppercase mb-1">Safety</div>
-                <div className="text-xl font-bold text-[#00FF9D]">{tripData.safety_score || 92}%</div>
-              </div>
-            </div>
-          </motion.div>
-        )}
+              <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                onClick={handleAnalyzeRoutes} disabled={loadingRoutes || sourceKey === destKey}
+                className="w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 bg-gradient-to-r from-[#00E5FF] to-[#7C4DFF] text-white disabled:opacity-50">
+                {loadingRoutes ? <Loader2 className="w-5 h-5 animate-spin" /> : <BrainCircuit className="w-5 h-5" />}
+                {loadingRoutes ? 'Analyzing Routes...' : 'Analyze Safe Routes'}
+              </motion.button>
+            </motion.div>
+          )}
 
-        <div className="glass p-6 rounded-3xl">
-          <h3 className="font-bold mb-4 flex items-center gap-2">
-            <UserPlus className="w-5 h-5 text-[#7C4DFF]" />
-            Emergency Contacts
-          </h3>
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between bg-black/30 p-3 rounded-xl border border-gray-800">
-              <div>
-                <div className="font-medium">Mom</div>
-                <div className="text-xs text-gray-400">+91 98765 43210</div>
+          {/* STEP 2: Route Selection */}
+          {step === STEP.ROUTES && routeData && (
+            <motion.div key="routes" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+              className="glass p-6 rounded-3xl">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold">Select Route</h2>
+                <button onClick={() => setStep(STEP.INPUT)} className="text-xs text-gray-400 hover:text-white">Back</button>
               </div>
-              <div className="w-2 h-2 rounded-full bg-[#00FF9D]"></div>
-            </div>
-          </div>
-        </div>
+              <p className="text-sm text-gray-400 mb-4">{routeData.explanation}</p>
+
+              <div className="space-y-3">
+                {/* Safest Route */}
+                {routeData.safest_route && (
+                  <RouteOption
+                    route={routeData.safest_route}
+                    label="Safest"
+                    badge="#00FF9D"
+                    onSelect={() => handleStartTrip(routeData.safest_route)}
+                  />
+                )}
+                {/* Shortest Route (if different) */}
+                {routeData.shortest_route && routeData.shortest_route.id !== routeData.safest_route?.id && (
+                  <RouteOption
+                    route={routeData.shortest_route}
+                    label="Shortest"
+                    badge="#00E5FF"
+                    onSelect={() => handleStartTrip(routeData.shortest_route)}
+                  />
+                )}
+                {/* Alternatives */}
+                {(routeData.alternative_routes || []).slice(0, 2).map((r, i) => (
+                  <RouteOption key={i} route={r} label={`Option ${i + 2}`} badge="#7C4DFF"
+                    onSelect={() => handleStartTrip(r)} />
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {/* STEP 3: Tracking Active */}
+          {step === STEP.TRACKING && (
+            <motion.div key="tracking" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+              className="flex flex-col gap-4">
+              {/* Live Status Card */}
+              <div className={`glass p-5 rounded-3xl border transition-all duration-500 ${
+                liveRisk === 'HIGH'   ? 'border-[#FF3B5C]/60 shadow-[0_0_20px_rgba(255,59,92,0.2)]' :
+                liveRisk === 'MEDIUM' ? 'border-[#FFC857]/60' : 'border-[#00FF9D]/30'}`}>
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="font-bold">Live Monitoring</h3>
+                  <span className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full`}
+                    style={{ color: riskColor[liveRisk], background: `${riskColor[liveRisk]}18`, border: `1px solid ${riskColor[liveRisk]}44` }}>
+                    <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: riskColor[liveRisk] }}></span>
+                    {liveRisk} RISK
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <StatMini label="ETA" value={`${activeTrip?.eta_minutes ?? 25} min`} color="#00E5FF" />
+                  <StatMini label="Route" value={selectedRoute?.safety_label || 'Safe'} color="#00FF9D" />
+                  <StatMini label="Score" value={selectedRoute?.safety_score ?? '—'} color="#7C4DFF" />
+                </div>
+              </div>
+
+              {/* Threat Input */}
+              <div className="glass p-5 rounded-3xl">
+                <h3 className="font-bold mb-3 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-[#FFC857]" /> AI Threat Check
+                </h3>
+                <textarea rows={2} value={threatInput} onChange={e => setThreatInput(e.target.value)}
+                  placeholder="Describe situation e.g. 'Someone is following me'"
+                  className="w-full bg-black/50 border border-gray-700 rounded-xl p-3 text-sm text-white resize-none focus:outline-none focus:border-[#FFC857] mb-2" />
+                <button onClick={handleThreatAnalysis} disabled={analyzingThreat || !threatInput.trim()}
+                  className="w-full py-2 rounded-xl text-sm font-bold bg-[#FFC857] text-black disabled:opacity-50 flex items-center justify-center gap-2">
+                  {analyzingThreat ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  {analyzingThreat ? 'Analyzing...' : 'Analyze Threat'}
+                </button>
+                {threatResult && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                    className={`mt-3 p-3 rounded-xl border text-sm ${
+                      threatResult.risk_level === 'HIGH' ? 'border-[#FF3B5C]/50 bg-[#FF3B5C]/10' :
+                      threatResult.risk_level === 'MEDIUM' ? 'border-[#FFC857]/50 bg-[#FFC857]/10' :
+                      'border-[#00FF9D]/50 bg-[#00FF9D]/10'}`}>
+                    <div className="font-bold mb-1" style={{ color: riskColor[threatResult.risk_level] }}>
+                      {threatResult.risk_level} RISK
+                    </div>
+                    <p className="text-gray-300 text-xs">{threatResult.message}</p>
+                    {threatResult.auto_escalated && (
+                      <p className="text-[#FFC857] text-xs mt-1 font-bold">
+                        Auto-alerted {threatResult.escalation_result?.contacts_count ?? 0} emergency contacts
+                      </p>
+                    )}
+                  </motion.div>
+                )}
+              </div>
+
+              {/* End Trip */}
+              <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                onClick={handleEndTrip}
+                className="w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 bg-gradient-to-r from-[#FF3B5C] to-red-700 text-white">
+                <Square className="w-5 h-5" fill="currentColor" /> End Trip Safely
+              </motion.button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      <div className="w-full md:w-2/3 flex flex-col gap-6">
-        <div className="glass rounded-3xl border border-[#00E5FF]/20 overflow-hidden h-[400px] md:h-auto md:flex-1 relative">
-          <MapView 
-            source={isTracking ? sourceCoords : null} 
-            destination={isTracking ? destCoords : null}
-            routeCoordinates={isTracking ? routeCoords : []}
-            currentPosition={isTracking ? currentPosition : null}
+      {/* ── RIGHT PANEL: MAP ────────────────────────────────────────────────── */}
+      <div className="w-full md:w-3/5 flex flex-col gap-4">
+        <div className={`glass rounded-3xl overflow-hidden h-[450px] md:h-full relative border transition-all duration-700 ${
+          liveRisk === 'HIGH' ? 'border-[#FF3B5C]/50' :
+          liveRisk === 'MEDIUM' ? 'border-[#FFC857]/50' : 'border-[#00E5FF]/20'}`}>
+          <MapView
+            source={src ? [src.lat, src.lon] : null}
+            destination={dest ? [dest.lat, dest.lon] : null}
+            routeCoordinates={
+              step === STEP.TRACKING ? routeWaypointsRef.current :
+              step === STEP.ROUTES && routeData?.safest_route?.waypoints
+                ? routeData.safest_route.waypoints.map(w => [w.lat, w.lon])
+                : []
+            }
+            currentPosition={currentPos}
+            routeColor={routeColor}
+            riskLevel={liveRisk}
           />
-          {/* Radar Overlay Effect */}
-          {isTracking && (
-             <div className="absolute inset-0 pointer-events-none z-[400] flex items-center justify-center">
-                <div className="w-[150%] h-[150%] rounded-full border border-[#00E5FF]/10 animate-[ping_4s_cubic-bezier(0,0,0.2,1)_infinite]"></div>
-             </div>
+          {step === STEP.TRACKING && (
+            <div className="absolute inset-0 pointer-events-none z-[400] flex items-center justify-center">
+              <div className={`w-[200%] h-[200%] rounded-full border animate-ping opacity-10`}
+                style={{ borderColor: riskColor[liveRisk] }}></div>
+            </div>
           )}
         </div>
-        
-        {isTracking && (
-          <div className="glass p-6 rounded-3xl">
-            <h3 className="font-bold mb-4">AI Threat Radar</h3>
-            <ThreatBox threat={{ type: 'info', message: 'Route clear. Lighting is optimal.', time: 'Live' }} />
-            <ThreatBox threat={{ type: 'warning', message: 'Moderate risk zone ahead, alternative route suggested.', time: '1 min ago' }} />
-          </div>
-        )}
       </div>
+    </div>
+  );
+}
+
+function RouteOption({ route, label, badge, onSelect }) {
+  const score = route?.safety_score ?? 50;
+  const scoreColor = score >= 65 ? '#00FF9D' : score >= 40 ? '#FFC857' : '#FF3B5C';
+  return (
+    <motion.div whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
+      onClick={onSelect}
+      className="cursor-pointer p-4 bg-black/40 rounded-2xl border border-gray-800 hover:border-gray-600 transition-all flex items-center justify-between">
+      <div>
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-xs font-bold px-2 py-0.5 rounded-full text-black" style={{ background: badge }}>{label}</span>
+          <span className="font-bold text-sm">{route?.name || 'Route'}</span>
+        </div>
+        <div className="text-xs text-gray-400">{route?.distance_km ? `${route.distance_km} km` : ''} · {route?.safety_label || ''}</div>
+      </div>
+      <div className="flex items-center gap-3">
+        <span className="text-2xl font-black" style={{ color: scoreColor }}>{score}</span>
+        <ChevronRight className="w-5 h-5 text-gray-500" />
+      </div>
+    </motion.div>
+  );
+}
+
+function StatMini({ label, value, color }) {
+  return (
+    <div className="bg-black/30 rounded-xl p-2">
+      <div className="text-xs text-gray-500 uppercase mb-1">{label}</div>
+      <div className="font-bold text-sm" style={{ color }}>{value}</div>
     </div>
   );
 }

@@ -69,6 +69,13 @@ export const getTrip = (tripId) =>
 export const getActiveTrips = (userId = null) =>
   apiCall(`/api/active-trips${userId ? `?user_id=${userId}` : ''}`);
 
+export const getTripHistory = (userId = 1, limit = 10) =>
+  apiCall(`/api/trip-history?user_id=${userId}&limit=${limit}`, {}, {
+    success: true,
+    trips: [],
+    count: 0,
+  });
+
 // ── SafeRoute ─────────────────────────────────────────────────────────────────
 export const getSafestRoute = (originLat, originLon, destLat, destLon) =>
   apiCall('/api/safest-route', {

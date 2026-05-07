@@ -122,6 +122,31 @@ def get_active_trips(user_id: int = None) -> list:
     return [dict(r) for r in rows]
 
 
+def get_trip_history(user_id: int = 1, limit: int = 10) -> list:
+    """
+    Return the most recent ENDED trips for a user, including safety rating if available.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT t.*,
+               rf.rating    AS safety_rating,
+               rf.comment   AS feedback_text
+        FROM trips t
+        LEFT JOIN route_feedback rf ON rf.route_id = 'trip_' || t.id
+        WHERE t.status = 'ENDED'
+          AND (t.user_id = ? OR t.user_id IS NULL)
+        ORDER BY t.ended_at DESC
+        LIMIT ?
+        """,
+        (user_id, limit),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 # ── Route Deviation Check ─────────────────────────────────────────────────────
 
 def check_deviation(trip_id: int, current_lat: float, current_lon: float) -> dict:

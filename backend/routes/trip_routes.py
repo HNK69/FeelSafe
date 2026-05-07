@@ -151,3 +151,20 @@ def api_active_trips():
     user_id = request.args.get("user_id", type=int)
     trips   = get_active_trips(user_id)
     return jsonify({"success": True, "trips": trips, "count": len(trips)}), 200
+
+
+# ── Trip History ──────────────────────────────────────────────────────────────
+@trip_bp.route("/trip-history", methods=["GET"])
+def api_trip_history():
+    """
+    Return completed (ENDED) trips for a user, most recent first.
+
+    Query params:
+        user_id (int, default 1)
+        limit   (int, default 10)
+    """
+    user_id = request.args.get("user_id", 1, type=int)
+    limit   = request.args.get("limit", 10, type=int)
+    from services.trip_service import get_trip_history
+    trips = get_trip_history(user_id, limit)
+    return jsonify({"success": True, "trips": trips, "count": len(trips)}), 200

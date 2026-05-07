@@ -16,10 +16,10 @@ async function apiCall(endpoint, options = {}, fallbackData = null) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const data = await response.json();
-    console.log(`Backend response for ${endpoint}:`, data);
+    console.log(`✅ Backend response for ${endpoint}:`, data);
     return data;
   } catch (error) {
-    console.error(`API Call failed for ${endpoint}:`, error.message);
+    console.error(`❌ API Call failed for ${endpoint}:`, error.message);
     if (fallbackData !== null) {
       console.warn('Using fallback data instead due to backend failure.');
       return fallbackData;
@@ -33,39 +33,61 @@ export const startTrip = async (tripData) => {
     method: 'POST',
     body: JSON.stringify(tripData),
   }, {
-    trip_id: 'dummy-trip-123',
+    trip_id: 'demo-trip-001',
     status: 'success',
-    eta: '25 mins',
-    safety_score: 92
+    eta: '22 mins',
+    safety_score: 88
   });
 };
 
 export const analyzeThreat = async (text) => {
-  // Pass strictly the text directly, backend expects {"text": "..."}
   return apiCall('/api/analyze-threat', {
     method: 'POST',
     body: JSON.stringify({ text }),
   }, {
-    risk_level: text.toLowerCase().includes('help') ? 'High' : 'Low',
-    confidence: 0.95,
-    threat_score: text.toLowerCase().includes('help') ? 90 : 10,
-    categories: ['Suspicious Activity']
+    risk_level: 'LOW',
+    confidence: 0.05,
+    threat_score: 5,
+    score: 5,
+    reason: 'No significant threat indicators detected.',
+    matched_keywords: [],
+    action_tips: ['Stay aware of your surroundings.'],
+    categories: []
   });
 };
 
-export const safestRoute = async (routeData) => {
+export const safestRoute = async ({ origin_lat, origin_lon, dest_lat, dest_lon }) => {
   return apiCall('/api/safest-route', {
     method: 'POST',
-    body: JSON.stringify(routeData),
+    body: JSON.stringify({ origin_lat, origin_lon, dest_lat, dest_lon }),
   }, {
-    safest_route: "Main Highway",
-    safety_score: 85,
-    risk_label: "Low Risk",
-    alternative_routes: [
-      { name: "Downtown Ave", score: 65, risk: "Moderate" },
-      { name: "Backstreets", score: 40, risk: "High Risk" }
-    ],
-    explanation: "This route avoids known poorly-lit areas and has a higher density of community reports indicating safety."
+    safest_route: {
+      id: 'fallback',
+      name: 'Main Highway (Fallback)',
+      safety_score: 75,
+      safety_label: 'Safe',
+      distance_km: 14.2,
+      nearby_police: true,
+      nearby_hospital: false,
+      tags: ['busy_road'],
+      safety_factors: ['Police station nearby (+22)', 'Community rating: 3.8/5 (+9)'],
+      description: 'Main road via India Gate — generally well-lit and busy.'
+    },
+    all_routes_ranked: [],
+    explanation: 'Route evaluated using current safety conditions. Backend offline — showing estimated data.',
+  });
+};
+
+export const submitFeedback = async (feedbackData) => {
+  return apiCall('/api/submit-route-feedback', {
+    method: 'POST',
+    body: JSON.stringify(feedbackData),
+  }, { success: true, message: 'Feedback noted (offline mode).' });
+};
+
+export const getRouteStats = async (routeId) => {
+  return apiCall(`/api/route-stats/${routeId}`, {}, {
+    route_stats: { avg_rating: 0, total_ratings: 0, unsafe_report_count: 0 }
   });
 };
 
@@ -75,8 +97,8 @@ export const emergencyAlert = async (locationData) => {
     body: JSON.stringify(locationData),
   }, {
     status: 'Alert Sent',
-    alert_id: 'SOS-999',
-    notified: ['Police', 'Emergency Contacts']
+    alert_id: 'SOS-DEMO',
+    notified: ['Emergency Contacts', 'Authorities']
   });
 };
 

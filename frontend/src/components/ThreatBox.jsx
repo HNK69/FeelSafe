@@ -1,31 +1,24 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertCircle, Info, AlertTriangle } from 'lucide-react';
+import { AlertCircle, Info, AlertTriangle, ChevronRight } from 'lucide-react';
 import clsx from 'clsx';
 
 export default function ThreatBox({ threat }) {
+  const type = threat.type || 'info';
+
   const getIcon = () => {
-    switch (threat.type) {
-      case 'danger': return <AlertCircle className="w-5 h-5 text-[#FF3B5C]" />;
+    switch (type) {
+      case 'danger':  return <AlertCircle className="w-5 h-5 text-[#FF3B5C]" />;
       case 'warning': return <AlertTriangle className="w-5 h-5 text-[#FFC857]" />;
-      default: return <Info className="w-5 h-5 text-[#00E5FF]" />;
+      default:        return <Info className="w-5 h-5 text-[#00E5FF]" />;
     }
   };
 
-  const getBorderColor = () => {
-    switch (threat.type) {
-      case 'danger': return 'border-[#FF3B5C]/50';
-      case 'warning': return 'border-[#FFC857]/50';
-      default: return 'border-[#00E5FF]/50';
-    }
+  const colors = {
+    danger:  { border: 'border-[#FF3B5C]/50', bg: 'bg-[#FF3B5C]/10', ring: '#FF3B5C', text: 'text-[#FF3B5C]' },
+    warning: { border: 'border-[#FFC857]/50', bg: 'bg-[#FFC857]/10', ring: '#FFC857', text: 'text-[#FFC857]' },
+    info:    { border: 'border-[#00E5FF]/50', bg: 'bg-[#00E5FF]/10', ring: '#00E5FF', text: 'text-[#00E5FF]' },
   };
-
-  const getBgColor = () => {
-    switch (threat.type) {
-      case 'danger': return 'bg-[#FF3B5C]/10';
-      case 'warning': return 'bg-[#FFC857]/10';
-      default: return 'bg-[#00E5FF]/10';
-    }
-  };
+  const c = colors[type] || colors.info;
 
   return (
     <AnimatePresence>
@@ -34,15 +27,45 @@ export default function ThreatBox({ threat }) {
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, scale: 0.9 }}
         className={clsx(
-          "flex items-start gap-3 p-3 rounded-xl border backdrop-blur-md mb-3",
-          getBorderColor(),
-          getBgColor()
+          'relative flex items-start gap-3 p-3 rounded-xl border backdrop-blur-md mb-3 overflow-hidden',
+          c.border, c.bg
         )}
       >
-        <div className="mt-0.5">{getIcon()}</div>
-        <div className="flex-1">
-          <p className="text-sm font-medium text-white">{threat.message}</p>
-          <span className="text-xs text-gray-400 mt-1 block">{threat.time}</span>
+        {/* Pulse ring for danger */}
+        {type === 'danger' && (
+          <span
+            className="absolute -top-1 -left-1 w-3 h-3 rounded-full animate-ping opacity-60"
+            style={{ backgroundColor: c.ring }}
+          />
+        )}
+
+        <div className="mt-0.5 flex-shrink-0">{getIcon()}</div>
+
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-white leading-snug">{threat.message}</p>
+
+          {/* reason from live API */}
+          {threat.reason && (
+            <p className="text-xs text-gray-400 mt-1 leading-relaxed">{threat.reason}</p>
+          )}
+
+          {/* action tips chips */}
+          {threat.action_tips && threat.action_tips.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {threat.action_tips.slice(0, 2).map((tip, i) => (
+                <span
+                  key={i}
+                  className={clsx('text-xs px-2 py-0.5 rounded-full border flex items-center gap-1', c.text,
+                    'bg-black/30 border-white/10')}
+                >
+                  <ChevronRight className="w-3 h-3 flex-shrink-0" />
+                  {tip}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <span className="text-xs text-gray-500 mt-1 block">{threat.time}</span>
         </div>
       </motion.div>
     </AnimatePresence>

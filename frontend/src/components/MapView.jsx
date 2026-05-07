@@ -9,7 +9,7 @@ import iconRetinaUrl from 'leaflet/dist/images/marker-icon-2x.png';
 import iconUrl from 'leaflet/dist/images/marker-icon.png';
 import shadowUrl from 'leaflet/dist/images/marker-shadow.png';
 
-export default function MapView({ routeCoordinates, source, destination, currentPosition, markers = [] }) {
+export default function MapView({ routeCoordinates, source, destination, currentPosition, markers = [], routeColor = '#00E5FF' }) {
   useEffect(() => {
     delete L.Icon.Default.prototype._getIconUrl;
     L.Icon.Default.mergeOptions({
@@ -96,7 +96,7 @@ export default function MapView({ routeCoordinates, source, destination, current
         {routeCoordinates && routeCoordinates.length > 0 && (
           <Polyline 
             positions={routeCoordinates} 
-            pathOptions={{ color: '#00E5FF', weight: 5, opacity: 0.8 }} 
+            pathOptions={{ color: routeColor, weight: 5, opacity: 0.85 }} 
           />
         )}
 

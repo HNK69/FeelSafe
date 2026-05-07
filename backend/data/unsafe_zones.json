@@ -5,8 +5,10 @@
     "lat": 28.6492,
     "lon": 77.2050,
     "risk": "HIGH",
-    "reason": "Poorly lit, isolated, frequent incidents reported",
-    "reports": 14
+    "reason": "Poorly lit, isolated road with frequent incidents reported at night",
+    "reports": 14,
+    "active_hours": "20:00-06:00",
+    "incident_types": ["harassment", "robbery", "stalking"]
   },
   {
     "id": "zone_002",
@@ -14,8 +16,10 @@
     "lat": 28.6139,
     "lon": 77.2090,
     "risk": "HIGH",
-    "reason": "Isolated underpass, no CCTV, frequent harassment",
-    "reports": 9
+    "reason": "Isolated underpass with no CCTV, frequent harassment and chain snatching",
+    "reports": 9,
+    "active_hours": "19:00-07:00",
+    "incident_types": ["harassment", "chain_snatching"]
   },
   {
     "id": "zone_003",
@@ -23,8 +27,10 @@
     "lat": 28.6719,
     "lon": 77.1640,
     "risk": "MEDIUM",
-    "reason": "Deserted at night, no street lights after 9PM",
-    "reports": 6
+    "reason": "Deserted at night, no street lights after 9 PM, minimal police patrolling",
+    "reports": 6,
+    "active_hours": "21:00-05:00",
+    "incident_types": ["stalking", "eve_teasing"]
   },
   {
     "id": "zone_004",
@@ -32,8 +38,10 @@
     "lat": 28.6431,
     "lon": 77.2189,
     "risk": "MEDIUM",
-    "reason": "Community reports of suspicious activity",
-    "reports": 4
+    "reason": "Narrow dead-end lanes with community reports of suspicious activity",
+    "reports": 4,
+    "active_hours": "22:00-06:00",
+    "incident_types": ["suspicious_activity"]
   },
   {
     "id": "zone_005",
@@ -41,8 +49,10 @@
     "lat": 28.5733,
     "lon": 77.2195,
     "risk": "LOW",
-    "reason": "Generally safe but be cautious after 10PM",
-    "reports": 2
+    "reason": "Generally safe but park becomes isolated after 10 PM",
+    "reports": 2,
+    "active_hours": "22:00-06:00",
+    "incident_types": ["eve_teasing"]
   },
   {
     "id": "zone_006",
@@ -50,8 +60,10 @@
     "lat": 28.5985,
     "lon": 77.0420,
     "risk": "HIGH",
-    "reason": "Isolated, multiple SOS reports from women",
-    "reports": 11
+    "reason": "Isolated overpass with multiple SOS alerts from women at night",
+    "reports": 11,
+    "active_hours": "20:00-06:00",
+    "incident_types": ["stalking", "harassment", "robbery"]
   },
   {
     "id": "zone_007",
@@ -59,8 +71,10 @@
     "lat": 28.6563,
     "lon": 77.1970,
     "risk": "HIGH",
-    "reason": "No lighting, dead-end street, avoid at night",
-    "reports": 8
+    "reason": "No lighting, dead-end street, frequently deserted — avoid at night",
+    "reports": 8,
+    "active_hours": "19:00-07:00",
+    "incident_types": ["harassment", "stalking"]
   },
   {
     "id": "zone_008",
@@ -68,7 +82,86 @@
     "lat": 28.6290,
     "lon": 77.3758,
     "risk": "MEDIUM",
-    "reason": "Isolated parking area, low foot traffic at night",
-    "reports": 5
+    "reason": "Isolated parking area with low foot traffic and poor visibility at night",
+    "reports": 5,
+    "active_hours": "21:00-06:00",
+    "incident_types": ["robbery", "suspicious_activity"]
+  },
+  {
+    "id": "zone_009",
+    "name": "Tughlaqabad Forest Road",
+    "lat": 28.5100,
+    "lon": 77.2630,
+    "risk": "HIGH",
+    "reason": "Dense forest road with no signal, no lighting, and multiple assault reports",
+    "reports": 16,
+    "active_hours": "18:00-07:00",
+    "incident_types": ["assault", "robbery", "harassment"]
+  },
+  {
+    "id": "zone_010",
+    "name": "Wazirabad Bridge Night Zone",
+    "lat": 28.7260,
+    "lon": 77.2350,
+    "risk": "HIGH",
+    "reason": "Bridge flanked by isolated riverbanks — frequently targeted robbery spot",
+    "reports": 12,
+    "active_hours": "21:00-05:00",
+    "incident_types": ["robbery", "assault"]
+  },
+  {
+    "id": "zone_011",
+    "name": "Mehrauli Backlane",
+    "lat": 28.5231,
+    "lon": 77.1868,
+    "risk": "MEDIUM",
+    "reason": "Winding narrow lanes with poor street coverage and past incident history",
+    "reports": 5,
+    "active_hours": "20:00-06:00",
+    "incident_types": ["harassment", "suspicious_activity"]
+  },
+  {
+    "id": "zone_012",
+    "name": "Naraina Industrial Area East",
+    "lat": 28.6310,
+    "lon": 77.1340,
+    "risk": "MEDIUM",
+    "reason": "Factories shut after 8 PM, area becomes completely desolate",
+    "reports": 7,
+    "active_hours": "20:00-07:00",
+    "incident_types": ["stalking", "eve_teasing"]
+  },
+  {
+    "id": "zone_013",
+    "name": "Shahdara Flyover Underside",
+    "lat": 28.6700,
+    "lon": 77.2970,
+    "risk": "HIGH",
+    "reason": "Notorious area under flyover — frequent harassment and substance abuse",
+    "reports": 18,
+    "active_hours": "18:00-06:00",
+    "incident_types": ["harassment", "assault", "robbery"]
+  },
+  {
+    "id": "zone_014",
+    "name": "Kalkaji Extension Back Road",
+    "lat": 28.5480,
+    "lon": 77.2580,
+    "risk": "LOW",
+    "reason": "Minor concerns reported — low activity area at late night hours",
+    "reports": 2,
+    "active_hours": "23:00-05:00",
+    "incident_types": ["suspicious_activity"]
+  },
+  {
+    "id": "zone_015",
+    "name": "Noida Expressway Service Lane",
+    "lat": 28.5070,
+    "lon": 77.3660,
+    "risk": "MEDIUM",
+    "reason": "Isolated service lane parallel to expressway — limited visibility and access",
+    "reports": 6,
+    "active_hours": "21:00-06:00",
+    "incident_types": ["harassment", "stalking"]
   }
 ]

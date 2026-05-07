@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Environment
+.env
+.env.*
+*.env
+
+# Database
+*.db
+*.sqlite3
+
+# Uploads (audio evidence - keep directory, ignore files)
+uploads/audio/*.webm
+uploads/audio/*.wav
+uploads/audio/*.mp3
+uploads/audio/*.m4a
+uploads/audio/*.ogg
+uploads/audio/*.mp4
+
+# IDE
+.vscode/
+.idea/

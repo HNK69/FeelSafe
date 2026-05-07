@@ -74,6 +74,7 @@ export default function StartTrip() {
   const [micTranscript, setMicTranscript]   = useState('');
   const [dangerZones, setDangerZones]       = useState(_cached?.dangerZones || []);
   const [safetyAnchors, setSafetyAnchors]   = useState(_cached?.safetyAnchors || {});
+  const [routeAnchors, setRouteAnchors]     = useState(_cached?.routeAnchors || []);  // flat list from API
   const [escapePoint, setEscapePoint]       = useState(_cached?.escapePoint || null);
   // Resume banner: show when returning mid-trip
   const [showResumeBanner, setShowResumeBanner] = useState(
@@ -142,6 +143,7 @@ export default function StartTrip() {
     setSelected(null);
     setDangerZones([]);
     setSafetyAnchors({});
+    setRouteAnchors([]);
     setEscapePoint(null);
     setThreatResult(null);
     setLiveRisk('LOW');
@@ -151,23 +153,20 @@ export default function StartTrip() {
       setRouteData(data);
       setStep(STEP.ROUTES);
 
-      // Always fetch safety anchors for the route midpoint (not just low-score)
+      // route_anchors come pre-computed from the API — no second fetch needed
+      const anchors = data?.route_anchors || [];
+      setRouteAnchors(anchors);
+      saveTripState({ routeAnchors: anchors });
+
+      // Also set danger zones from safest route for heatmap
       const best = data?.safest_route;
       if (best) {
-        // Set danger zones immediately for heatmap
         setDangerZones(best.danger_segments || []);
-        // Midpoint between src and dest
-        const midLat = (src.lat + dest.lat) / 2;
-        const midLon = (src.lon + dest.lon) / 2;
-        const anchorsRes = await getSafetyAnchors(midLat, midLon, 2000);
-        if (anchorsRes?.success) {
-          setSafetyAnchors(anchorsRes.anchors || {});
-          const bestAnchor = [
-            ...(anchorsRes.anchors?.police   || []),
-            ...(anchorsRes.anchors?.hospital || []),
-          ].sort((a, b) => a.distance_km - b.distance_km)[0];
-          if (bestAnchor) setEscapePoint({ ...bestAnchor, category: bestAnchor.type || 'safety' });
-        }
+        // Pick best escape point from anchor list
+        const bestAnchor = anchors
+          .filter(a => a.category === 'police' || a.category === 'hospital')
+          .sort((a, b) => a.distance_km - b.distance_km)[0];
+        if (bestAnchor) setEscapePoint({ ...bestAnchor });
       }
     } catch (e) {
       console.error(e);
@@ -241,8 +240,10 @@ export default function StartTrip() {
     setThreatResult(null); setLiveRisk('LOW');
     setRouteData(null); setSelected(null);
     setDangerZones([]); setSafetyAnchors({}); setEscapePoint(null);
+    setRouteAnchors([]);
     setShowResumeBanner(false);
   };
+
 
   // ── Threat analysis with auto-escalation ──────────────────────────────────
   const handleThreatAnalysis = async () => {
@@ -652,6 +653,52 @@ export default function StartTrip() {
           )}
         </div>
       </div>
+
+      {/* ── NEARBY SAFETY PANEL (full width, below map+sidebar) ─────────────── */}
+      {routeAnchors.length > 0 && (step === STEP.ROUTES || step === STEP.TRACKING) && (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+          className="w-full glass rounded-3xl border border-[#00FF9D]/20 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <MapPin className="w-4 h-4 text-[#00FF9D]" />
+            <h3 className="font-bold text-sm text-[#00FF9D]">Nearby Safety Along Your Route</h3>
+            <span className="ml-auto text-[10px] text-gray-500">{routeAnchors.length} places found · {srcKey} → {dstKey}</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+            {routeAnchors.slice(0, 10).map((a, i) => {
+              const CFG = {
+                police:           { icon: '🚔', color: '#3B82F6', label: 'Police' },
+                hospital:         { icon: '🏥', color: '#EF4444', label: 'Hospital' },
+                pharmacy:         { icon: '💊', color: '#8B5CF6', label: 'Pharmacy' },
+                metro_station:    { icon: '🚇', color: '#F59E0B', label: 'Metro' },
+                public_safe_zone: { icon: '🛡', color: '#00FF9D', label: 'Safe Zone' },
+              }[a.category] || { icon: '📍', color: '#FFC857', label: a.category };
+              const navUrl = a.navigate_url || `https://www.google.com/maps/dir/?api=1&destination=${a.lat},${a.lon}`;
+              return (
+                <div key={i} className="bg-black/30 border border-gray-800 hover:border-gray-600 rounded-xl p-2.5 flex flex-col gap-1.5 transition-colors">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm">{a.icon || CFG.icon}</span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                      style={{ background: `${CFG.color}20`, color: CFG.color }}>
+                      {CFG.label}
+                    </span>
+                    {a.open_24x7 && <span className="text-[9px] text-[#00FF9D] ml-auto">24/7</span>}
+                  </div>
+                  <div className="text-[11px] font-semibold text-white leading-tight line-clamp-2">{a.name}</div>
+                  <div className="text-[10px] text-gray-500">{a.distance_km} km away</div>
+                  <a href={navUrl} target="_blank" rel="noreferrer"
+                    className="text-[10px] font-bold px-2 py-1 rounded-lg text-center transition-colors mt-auto"
+                    style={{ background: '#00FF9D20', color: '#00FF9D', border: '1px solid #00FF9D40' }}
+                    onMouseEnter={e => { e.currentTarget.style.background='#00FF9D'; e.currentTarget.style.color='#000'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background='#00FF9D20'; e.currentTarget.style.color='#00FF9D'; }}>
+                    🧭 Navigate
+                  </a>
+                </div>
+              );
+            })}
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 }

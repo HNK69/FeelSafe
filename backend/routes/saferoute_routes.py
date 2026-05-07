@@ -48,13 +48,13 @@ def api_safest_route():
     if missing:
         return jsonify(error_response(f"Missing field: '{missing}'")[0]), 400
 
+    origin_lat = float(data["origin_lat"])
+    origin_lon = float(data["origin_lon"])
+    dest_lat   = float(data["dest_lat"])
+    dest_lon   = float(data["dest_lon"])
+
     try:
-        result = get_safest_route(
-            origin_lat  = float(data["origin_lat"]),
-            origin_lon  = float(data["origin_lon"]),
-            dest_lat    = float(data["dest_lat"]),
-            dest_lon    = float(data["dest_lon"]),
-        )
+        result = get_safest_route(origin_lat, origin_lon, dest_lat, dest_lon)
     except (ValueError, TypeError) as e:
         return jsonify(error_response(f"Invalid coordinates: {e}")[0]), 400
 
@@ -63,7 +63,6 @@ def api_safest_route():
     # ── Identify shortest route ───────────────────────────────────────────────
     shortest_route = None
     if all_routes:
-        # Sort by distance to find shortest (may not be safest)
         by_distance   = sorted(all_routes, key=lambda r: r.get("distance_km", 9999))
         shortest_route = by_distance[0] if by_distance else None
 
@@ -74,6 +73,41 @@ def api_safest_route():
     for r in all_routes:
         r['danger_segments'] = get_route_danger_segments(r)
 
+    # ── Corridor-based safety anchors (fetched ONCE, stored in response) ─────
+    # Sample 4 equidistant points along src→dest corridor, collect unique anchors
+    from services.anchor_service import get_safety_anchors as _get_anchors
+
+    best_route = result.get("safest_route", {})
+    corridor_pts = [
+        (origin_lat, origin_lon),
+        (origin_lat + (dest_lat - origin_lat) * 0.33,
+         origin_lon + (dest_lon - origin_lon) * 0.33),
+        (origin_lat + (dest_lat - origin_lat) * 0.66,
+         origin_lon + (dest_lon - origin_lon) * 0.66),
+        (dest_lat, dest_lon),
+    ]
+    # Also include any route waypoints
+    for wp in (best_route.get("waypoints") or [])[:3]:
+        if isinstance(wp, dict) and "lat" in wp:
+            corridor_pts.append((wp["lat"], wp["lon"]))
+
+    seen_ids   = set()   # deduplicate by "name|type"
+    flat_list  = []
+    for clat, clon in corridor_pts:
+        try:
+            res = _get_anchors(clat, clon, radius_m=3000, max_per_type=3)
+            for cat, items in (res.get("anchors") or {}).items():
+                for item in items:
+                    uid = f"{item.get('name','?')}|{cat}"
+                    if uid not in seen_ids:
+                        seen_ids.add(uid)
+                        flat_list.append({**item, "category": cat})
+        except Exception:
+            pass
+
+    # Sort by distance for display
+    flat_list.sort(key=lambda x: x.get("distance_km", 99))
+
     return jsonify({
         "success":            True,
         "safest_route":       result.get("safest_route"),
@@ -82,7 +116,9 @@ def api_safest_route():
         "all_routes_ranked":  all_routes,
         "explanation":        result.get("explanation", ""),
         "route_count":        len(all_routes),
+        "route_anchors":      flat_list,   # ← pre-computed, no second API call needed
     }), 200
+
 
 
 @saferoute_bp.route("/score-route", methods=["POST"])

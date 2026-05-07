@@ -218,3 +218,59 @@ def escalate_trip_to_sos(trip_id: int) -> dict:
     conn.commit()
     conn.close()
     return get_trip_by_id(trip_id)
+
+
+# ── Trip History ───────────────────────────────────────────────────────────────
+
+def get_trip_history(user_id: int = None, limit: int = 10) -> list:
+    """
+    Return completed (ENDED) trips joined with community feedback.
+
+    Args:
+        user_id: Optional filter by user.
+        limit:   Max rows to return (default 10).
+
+    Returns:
+        List of trip dicts, each including safety_rating and feedback_text
+        if a route_feedback record exists for that trip.
+    """
+    conn   = get_connection()
+    cursor = conn.cursor()
+
+    base_sql = """
+        SELECT
+            t.id,
+            t.user_id,
+            t.origin_name,
+            t.dest_name,
+            t.origin_lat,
+            t.origin_lon,
+            t.dest_lat,
+            t.dest_lon,
+            t.eta_minutes,
+            t.status,
+            t.started_at,
+            t.ended_at,
+            rf.rating        AS safety_rating,
+            rf.comment       AS feedback_text,
+            rf.is_unsafe_report
+        FROM trips t
+        LEFT JOIN route_feedback rf
+            ON rf.route_id = ('trip_' || t.id)
+        WHERE t.status IN ('ENDED', 'SOS')
+    """
+
+    if user_id:
+        cursor.execute(
+            base_sql + " AND t.user_id = ? ORDER BY t.ended_at DESC LIMIT ?",
+            (user_id, limit),
+        )
+    else:
+        cursor.execute(
+            base_sql + " ORDER BY t.ended_at DESC LIMIT ?",
+            (limit,),
+        )
+
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]

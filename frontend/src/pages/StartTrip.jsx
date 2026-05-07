@@ -9,6 +9,7 @@ import {
 import MapView from '../components/MapView';
 import FeedbackModal from '../components/FeedbackModal';
 import EscalationModal from '../components/EscalationModal';
+import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import { getSafestRoute, startTrip, endTrip, analyzeThreat, analyzeVoice, getSafetyAnchors } from '../services/api';
 
 // ── localStorage helpers ───────────────────────────────────────────────────────
@@ -70,7 +71,6 @@ export default function StartTrip() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [showEscalation, setShowEscalation] = useState(false);
   const [escalationData, setEscalationData] = useState(null);
-  const [micState, setMicState]             = useState('idle');
   const [micTranscript, setMicTranscript]   = useState('');
   const [dangerZones, setDangerZones]       = useState(_cached?.dangerZones || []);
   const [safetyAnchors, setSafetyAnchors]   = useState(_cached?.safetyAnchors || {});
@@ -82,8 +82,6 @@ export default function StartTrip() {
 
   const trackRef   = useRef(null);
   const wayptsRef  = useRef(_cached?.waypoints || []);
-  const mediaRef   = useRef(null);
-  const chunksRef  = useRef([]);
 
   // ── Auto-save on key state changes ────────────────────────────────────────
   useEffect(() => {
@@ -281,68 +279,53 @@ export default function StartTrip() {
   };
 
   // ── Voice recording ────────────────────────────────────────────────────────
-  const startMic = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      chunksRef.current = [];
-      mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-      mr.onstop = async () => {
-        stream.getTracks().forEach(t => t.stop());
-        setMicState('processing');
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        const voiceRes = await analyzeVoice(blob, {
-          tripId: activeTrip?.id,
-          userId: 1,
-          lat: currentPos?.[0] ?? src.lat,
-          lon: currentPos?.[1] ?? src.lon,
-        });
-        const tx = voiceRes.transcript || '';
-        if (tx) {
-          setMicTranscript(tx);
-          setThreatInput(tx);
-          // Auto-run full threat analysis immediately
-          const threatRes = await analyzeThreat(tx,
-            currentPos?.[0] ?? src.lat,
-            currentPos?.[1] ?? src.lon,
-            1, 'FeelSafe User', activeTrip?.id,
-          );
-          setThreatResult(threatRes);
-          const risk = threatRes.risk_level || 'LOW';
-          setLiveRisk(risk);
-          if (risk === 'HIGH' || risk === 'MEDIUM') {
-            if (threatRes.auto_escalated) {
-              setEscalationData(threatRes.escalation_result);
-              setShowEscalation(true);
-            }
-            // Auto-fetch escape points on HIGH
-            if (risk === 'HIGH') {
-              const lat = currentPos?.[0] ?? src.lat;
-              const lon = currentPos?.[1] ?? src.lon;
-              const anchorsRes = await getSafetyAnchors(lat, lon, 1000);
-              if (anchorsRes?.success) {
-                setSafetyAnchors(anchorsRes.anchors || {});
-                const best = [
-                  ...(anchorsRes.anchors?.police   || []),
-                  ...(anchorsRes.anchors?.hospital || []),
-                ].sort((a, b) => a.distance_km - b.distance_km)[0];
-                if (best) setEscapePoint({ ...best, category: 'emergency' });
-              }
-              if (threatRes.escalation_result?.whatsapp_link) {
-                setTimeout(() => window.open(threatRes.escalation_result.whatsapp_link, '_blank'), 2500);
-              }
-            }
+  // ── Mic: VAD-powered auto-stop ──────────────────────────────────────────────
+  const handleVoiceResult = useCallback(async (blob) => {
+    const voiceRes = await analyzeVoice(blob, {
+      tripId: activeTrip?.id,
+      userId: 1,
+      lat: currentPos?.[0] ?? src?.lat,
+      lon: currentPos?.[1] ?? src?.lon,
+    });
+    const tx = voiceRes.transcript || '';
+    if (tx) {
+      setMicTranscript(tx);
+      setThreatInput(tx);
+      const threatRes = await analyzeThreat(tx,
+        currentPos?.[0] ?? src?.lat,
+        currentPos?.[1] ?? src?.lon,
+        1, 'FeelSafe User', activeTrip?.id,
+      );
+      setThreatResult(threatRes);
+      const risk = threatRes.risk_level || 'LOW';
+      setLiveRisk(risk);
+      if (risk === 'HIGH' || risk === 'MEDIUM') {
+        if (threatRes.auto_escalated) {
+          setEscalationData(threatRes.escalation_result);
+          setShowEscalation(true);
+        }
+        if (risk === 'HIGH') {
+          const lat = currentPos?.[0] ?? src?.lat;
+          const lon = currentPos?.[1] ?? src?.lon;
+          const anchorsRes = await getSafetyAnchors(lat, lon, 1000);
+          if (anchorsRes?.success) {
+            setSafetyAnchors(anchorsRes.anchors || {});
+            const best = [
+              ...(anchorsRes.anchors?.police   || []),
+              ...(anchorsRes.anchors?.hospital || []),
+            ].sort((a, b) => a.distance_km - b.distance_km)[0];
+            if (best) setEscapePoint({ ...best, category: 'emergency' });
+          }
+          if (threatRes.escalation_result?.whatsapp_link) {
+            setTimeout(() => window.open(threatRes.escalation_result.whatsapp_link, '_blank'), 2500);
           }
         }
-        setMicState('idle');
-      };
-      mr.start();
-      mediaRef.current = mr;
-      setMicState('recording');
-    } catch { setMicState('idle'); }
-  };
+      }
+    }
+  }, [activeTrip, currentPos, src]);
 
-  const stopMic = () => { mediaRef.current?.stop(); };
+  const { micState, audioLevel, startRecording: startMic, stopRecording: stopMic } =
+    useVoiceRecorder({ onResult: handleVoiceResult });
 
   useEffect(() => () => clearInterval(trackRef.current), []);
 
@@ -541,21 +524,33 @@ export default function StartTrip() {
                     className="flex-1 py-2 rounded-xl text-sm font-bold bg-[#FFC857] text-black disabled:opacity-40 flex items-center justify-center gap-2">
                     {analyzing ? <><Loader2 className="w-4 h-4 animate-spin" /> Analyzing...</> : 'Analyze'}
                   </button>
-                  <button
-                    onClick={micState === 'recording' ? stopMic : startMic}
-                    disabled={micState === 'processing'}
-                    title={micState === 'recording' ? 'Stop recording' : 'Record voice'}
-                    className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-1 transition-all ${
-                      micState === 'recording'
-                        ? 'bg-[#FF3B5C] text-white animate-pulse'
-                        : micState === 'processing'
-                        ? 'bg-gray-700 text-gray-400'
-                        : 'bg-[#7C4DFF]/20 border border-[#7C4DFF]/50 text-[#7C4DFF] hover:bg-[#7C4DFF]/30'
-                    }`}>
-                    {micState === 'processing'
-                      ? <Loader2 className="w-4 h-4 animate-spin" />
-                      : <Mic className={`w-4 h-4 ${micState === 'recording' ? 'fill-current' : ''}`} />}
-                  </button>
+                  {/* Mic button — VAD auto-stop */}
+                  {(micState === 'listening' || micState === 'silence') ? (
+                    <button onClick={stopMic}
+                      title="Stop recording"
+                      className="px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all"
+                      style={{ background: micState === 'silence' ? '#FFC85722' : '#7C4DFF22', color: micState === 'silence' ? '#FFC857' : '#7C4DFF', border: `1px solid ${micState === 'silence' ? '#FFC85766' : '#7C4DFF66'}` }}>
+                      {/* Mini waveform */}
+                      <span className="flex gap-0.5 items-end h-4">
+                        {[...Array(4)].map((_, i) => (
+                          <span key={i} className="w-1 rounded-full transition-all duration-100"
+                            style={{ height: `${Math.max(3, Math.round(audioLevel * 14 * (0.5 + Math.random() * 0.5)))}px`,
+                              background: micState === 'silence' ? '#FFC857' : '#7C4DFF' }} />
+                        ))}
+                      </span>
+                      {micState === 'silence' ? 'Finishing…' : 'Stop'}
+                    </button>
+                  ) : micState === 'processing' ? (
+                    <button disabled className="px-4 py-2 rounded-xl text-sm bg-gray-700 text-gray-400 flex items-center gap-1">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    </button>
+                  ) : (
+                    <button onClick={startMic}
+                      title="Record voice"
+                      className="px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-1 bg-[#7C4DFF]/20 border border-[#7C4DFF]/50 text-[#7C4DFF] hover:bg-[#7C4DFF]/30 transition-all">
+                      <Mic className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
 
                 <AnimatePresence>

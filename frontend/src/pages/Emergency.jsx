@@ -1,5 +1,5 @@
 // pages/Emergency.jsx — upgraded with mic recording + quick SOS + safety anchors
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Phone, Share2, ShieldAlert, Activity, Loader2,
@@ -7,6 +7,7 @@ import {
   Square, MapPin, Zap
 } from 'lucide-react';
 import SOSButton from '../components/SOSButton';
+import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import {
   triggerEmergency, analyzeThreat, getContacts, addContact, deleteContact,
   analyzeVoice, quickSOS, getSafetyAnchors, getRecordingsForUser
@@ -27,12 +28,9 @@ export default function Emergency() {
   const [addingContact, setAddingContact] = useState(false);
   const [userLocation, setUserLocation]   = useState({ lat: 28.6315, lon: 77.2167 });
 
-  // Manual mic state
-  const [micState, setMicState]           = useState('idle');
+  // ── Voice recorder state (hook-managed) ───────────────────────────────────
   const [transcript, setTranscript]       = useState('');
   const [micError, setMicError]           = useState('');
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef   = useRef([]);
 
   // Emergency auto-recording state
   const [sosRecording, setSosRecording]   = useState(false);  // true while 30s SOS rec active
@@ -160,51 +158,21 @@ export default function Emergency() {
     setIsAnalyzing(false);
   };
 
-  // ── Microphone recording ────────────────────────────────────────────────────
-  const startRecording = async () => {
+  // ── Microphone recording — VAD-powered auto-stop ─────────────────────────
+  const processVoiceBlob = useCallback(async (blob) => {
     setMicError('');
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      audioChunksRef.current = [];
-      mr.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-      mr.onstop = async () => {
-        stream.getTracks().forEach(t => t.stop());
-        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        await processVoice(blob);
-      };
-      mr.start();
-      mediaRecorderRef.current = mr;
-      setMicState('recording');
-    } catch {
-      setMicError('Microphone access denied. Please allow mic permissions.');
-    }
-  };
-
-  const stopRecording = () => {
-    mediaRecorderRef.current?.stop();
-    setMicState('processing');
-  };
-
-  const processVoice = async (blob) => {
-    setMicState('processing');
     const res = await analyzeVoice(blob, { userId: 1, lat: userLocation.lat, lon: userLocation.lon });
     const tx = res.transcript || '';
     setTranscript(tx);
-
     if (tx) {
-      // Auto-insert transcript and immediately run full threat analysis
       setThreatText(tx);
       setIsAnalyzing(true);
       const threatRes = await analyzeThreat(tx, userLocation.lat, userLocation.lon, 1, 'FeelSafe User');
       setAnalysis(threatRes);
-
-      // Auto-escalate if HIGH
       if (threatRes?.risk_level === 'HIGH' || threatRes?.risk_level === 'MEDIUM') {
         if (threatRes?.auto_escalated && threatRes?.escalation_result) {
           setEscalationResult(threatRes.escalation_result);
         }
-        // If HIGH and not auto-escalated yet, trigger emergency
         if (threatRes?.risk_level === 'HIGH' && !threatRes?.auto_escalated) {
           const esc = await triggerEmergency(userLocation.lat, userLocation.lon, 1, 'FeelSafe User', null, null, 'HIGH', tx);
           setEscalationResult(esc);
@@ -213,22 +181,23 @@ export default function Emergency() {
       }
       setIsAnalyzing(false);
     } else {
-      // No transcript — use voice analysis result as fallback
       setAnalysis({
-        risk_level:       res.risk_level || 'LOW',
-        score:            res.score ?? 0,
-        message:          res.message || 'No speech detected.',
-        action_tips:      res.action_tips || [],
+        risk_level: res.risk_level || 'LOW', score: res.score ?? 0,
+        message: res.message || 'No speech detected.',
+        action_tips: res.action_tips || [],
         matched_keywords: [...(res.matched_keywords || []), ...(res.panic_keywords || [])],
-        auto_escalated:   res.auto_escalated,
+        auto_escalated: res.auto_escalated,
       });
       if (res.auto_escalated && res.escalation_result) setEscalationResult(res.escalation_result);
     }
-
-    // Refresh evidence panel
     getRecordingsForUser(1, 5).then(r => { if (r?.success) setRecordings(r.recordings); });
-    setMicState('idle');
-  };
+  }, [userLocation]);
+
+  const { micState, audioLevel, startRecording, stopRecording } = useVoiceRecorder({
+    onResult: processVoiceBlob,
+  });
+
+
 
 
   const handleAddContact = async () => {
@@ -478,20 +447,44 @@ export default function Emergency() {
             <h2 className="text-lg font-black mb-1 flex items-center gap-2">
               <Mic className="w-5 h-5 text-[#7C4DFF]" /> Voice Threat Analysis
             </h2>
-            <p className="text-gray-400 text-xs mb-4">Speak — AI transcribes & analyzes threat automatically</p>
+            <p className="text-gray-400 text-xs mb-4">Speak — AI auto-stops when you're done & analyzes immediately</p>
 
             <div className="flex flex-col items-center gap-4">
               <AnimatePresence mode="wait">
-                {micState === 'recording' ? (
-                  <motion.div key="rec" initial={{ scale: 0.8 }} animate={{ scale: 1 }} className="flex flex-col items-center gap-3">
-                    <motion.div animate={{ scale: [1, 1.12, 1] }} transition={{ repeat: Infinity, duration: 0.8 }}
-                      className="w-20 h-20 rounded-full bg-[#FF3B5C]/20 border-2 border-[#FF3B5C] flex items-center justify-center">
-                      <Mic className="w-8 h-8 text-[#FF3B5C]" />
-                    </motion.div>
-                    <span className="text-xs text-[#FF3B5C] font-bold animate-pulse">RECORDING...</span>
+                {(micState === 'listening' || micState === 'silence') ? (
+                  <motion.div key="rec" initial={{ scale: 0.8 }} animate={{ scale: 1 }} className="flex flex-col items-center gap-3 w-full">
+                    {/* Animated waveform */}
+                    <div className="relative w-20 h-20 flex items-center justify-center">
+                      {/* Outer glow ring */}
+                      <motion.div className="absolute inset-0 rounded-full border-2"
+                        style={{ borderColor: micState === 'silence' ? '#FFC857' : '#7C4DFF' }}
+                        animate={{ scale: [1, 1 + audioLevel * 0.4, 1], opacity: [0.6, 0.9, 0.6] }}
+                        transition={{ repeat: Infinity, duration: 0.4 }} />
+                      {/* Inner fill */}
+                      <div className="w-16 h-16 rounded-full flex items-center justify-center"
+                        style={{ background: micState === 'silence' ? '#FFC85722' : '#7C4DFF22' }}>
+                        <Mic className="w-7 h-7" style={{ color: micState === 'silence' ? '#FFC857' : '#7C4DFF' }} />
+                      </div>
+                      {/* Audio level bars */}
+                      <div className="absolute bottom-[-18px] flex gap-0.5 items-end">
+                        {[...Array(7)].map((_, i) => {
+                          const h = Math.max(3, Math.round(audioLevel * 20 * (0.4 + Math.sin(i * 1.3 + Date.now() / 200) * 0.4)));
+                          return <div key={i} className="w-1.5 rounded-full transition-all duration-75"
+                            style={{ height: `${h}px`, background: micState === 'silence' ? '#FFC857' : '#7C4DFF' }} />;
+                        })}
+                      </div>
+                    </div>
+                    <div className="mt-4 text-center">
+                      <span className="text-sm font-bold" style={{ color: micState === 'silence' ? '#FFC857' : '#7C4DFF' }}>
+                        {micState === 'silence' ? 'Silence detected...' : 'Listening...'}
+                      </span>
+                      <div className="text-[10px] text-gray-500 mt-0.5">
+                        {micState === 'silence' ? 'Auto-stopping...' : 'Speak clearly — auto-stops when you finish'}
+                      </div>
+                    </div>
                     <button onClick={stopRecording}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-[#FF3B5C] text-white rounded-xl font-bold">
-                      <Square className="w-4 h-4" /> Stop Recording
+                      className="flex items-center gap-2 px-4 py-2 bg-black/40 border border-gray-700 text-gray-300 rounded-xl text-xs hover:border-gray-500 transition-colors">
+                      <Square className="w-3.5 h-3.5" /> Stop Manually
                     </button>
                   </motion.div>
                 ) : micState === 'processing' ? (

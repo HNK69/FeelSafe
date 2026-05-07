@@ -21,15 +21,18 @@ from utils.constants import (
 THREAT_KEYWORDS: dict[str, int] = {
     # Immediate physical danger – weight 5
     "rape": 5, "molest": 5, "kidnap": 5, "abduct": 5, "traffick": 5,
+    "kill": 5, "murder": 5, "killing": 5, "murdered": 5, "shoot": 5,
+    "choke": 5, "strangling": 5, "drag me": 5, "forced into": 5,
     # Violence / weapons – weight 4
     "attack": 4, "attacked": 4, "assault": 4, "weapon": 4, "knife": 4,
     "gun": 4, "stabbing": 4, "bleeding": 4, "hit me": 4, "beating me": 4,
+    "punched": 4, "grabbed me": 4, "punching": 4,
     # Stalking / following – weight 4
     "someone following": 4, "following me": 4, "being followed": 4,
     "stalking me": 4, "chasing me": 4, "man following": 4, "guy following": 4,
     # Emergency signals – weight 4
     "help me": 4, "call police": 4, "call 100": 4, "call 112": 4, "sos": 4,
-    "send help": 4, "need help": 4, "in danger": 4,
+    "send help": 4, "need help": 4, "in danger": 4, "please help me": 5,
     # Cab / vehicle threats – weight 3-4
     "cab changed route": 4, "locked in": 4, "door locked": 4,
     "wont let me out": 4, "taking somewhere": 4,
@@ -39,11 +42,11 @@ THREAT_KEYWORDS: dict[str, int] = {
     "help": 3, "threat": 3, "threatened": 3, "emergency": 3, "danger": 3,
     "eve teasing": 3, "harassing": 3, "harassment": 3,
     "groping": 4, "grabbing me": 4, "touched me": 3,
-    "feel unsafe": 3, "feeling unsafe": 3, "not safe": 3,
+    "feel unsafe": 3, "feeling unsafe": 3, "not safe": 3, "unsafe": 3,
     "stalking": 3, "chased": 3, "suspicious person": 3, "suspicious man": 3,
     "following slowly": 3, "very scared": 3, "panicking": 3, "terrified": 3,
     # Emotional distress – weight 2
-    "unsafe": 2, "scared": 2, "afraid": 2, "frightened": 2,
+    "scared": 2, "afraid": 2, "frightened": 2,
     "uncomfortable": 1, "suspicious": 2, "staring at me": 2,
     "drunk man": 2, "drunk person": 2, "intoxicated man": 2,
     "detour": 2, "unfamiliar area": 2, "dont know area": 2,
@@ -126,21 +129,29 @@ def analyse_threat(text: str) -> dict:
 
     matched = list(dict.fromkeys(matched))  # preserve order, deduplicate
 
+    # Instant HIGH override — any single weight-5 keyword = always HIGH
+    _INSTANT_HIGH = {k for k, v in THREAT_KEYWORDS.items() if v >= 5}
+    if any(kw in matched for kw in _INSTANT_HIGH):
+        score = max(score, 8)  # ensure score >= HIGH threshold
+
     risk_level = threat_score_to_risk(score)
     confidence = compute_threat_confidence(score, len(matched))
     reason     = _build_reason(risk_level, matched, matched_amplifiers)
     message    = _risk_message(risk_level)
     tips       = _action_tips(risk_level, matched)
 
+    # Map raw score to 0-100 for frontend display
+    display_score = min(int(score * 12), 100)
+
     return {
-        "risk_level":        risk_level,
-        "confidence":        confidence,
-        "message":           message,
-        "reason":            reason,
-        "score":             score,
-        "matched_keywords":  matched,
+        "risk_level":         risk_level,
+        "confidence":         confidence,
+        "message":            message,
+        "reason":             reason,
+        "score":              display_score,
+        "matched_keywords":   matched,
         "matched_amplifiers": matched_amplifiers,
-        "action_tips":       tips,
+        "action_tips":        tips,
     }
 
 

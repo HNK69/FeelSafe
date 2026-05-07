@@ -175,20 +175,49 @@ export default function Emergency() {
   };
 
   const processVoice = async (blob) => {
+    setMicState('processing');
     const res = await analyzeVoice(blob, { userId: 1, lat: userLocation.lat, lon: userLocation.lon });
-    setTranscript(res.transcript || '');
-    if (res.transcript) setThreatText(res.transcript);
-    setAnalysis({
-      risk_level:       res.risk_level,
-      score:            res.score,
-      message:          res.message,
-      action_tips:      res.action_tips || [],
-      matched_keywords: [...(res.matched_keywords || []), ...(res.panic_keywords || [])],
-      auto_escalated:   res.auto_escalated,
-    });
-    if (res.auto_escalated && res.escalation_result) setEscalationResult(res.escalation_result);
+    const tx = res.transcript || '';
+    setTranscript(tx);
+
+    if (tx) {
+      // Auto-insert transcript and immediately run full threat analysis
+      setThreatText(tx);
+      setIsAnalyzing(true);
+      const threatRes = await analyzeThreat(tx, userLocation.lat, userLocation.lon, 1, 'FeelSafe User');
+      setAnalysis(threatRes);
+
+      // Auto-escalate if HIGH
+      if (threatRes?.risk_level === 'HIGH' || threatRes?.risk_level === 'MEDIUM') {
+        if (threatRes?.auto_escalated && threatRes?.escalation_result) {
+          setEscalationResult(threatRes.escalation_result);
+        }
+        // If HIGH and not auto-escalated yet, trigger emergency
+        if (threatRes?.risk_level === 'HIGH' && !threatRes?.auto_escalated) {
+          const esc = await triggerEmergency(userLocation.lat, userLocation.lon, 1, 'FeelSafe User', null, null, 'HIGH', tx);
+          setEscalationResult(esc);
+          if (esc?.whatsapp_link) window.open(esc.whatsapp_link, '_blank');
+        }
+      }
+      setIsAnalyzing(false);
+    } else {
+      // No transcript — use voice analysis result as fallback
+      setAnalysis({
+        risk_level:       res.risk_level || 'LOW',
+        score:            res.score ?? 0,
+        message:          res.message || 'No speech detected.',
+        action_tips:      res.action_tips || [],
+        matched_keywords: [...(res.matched_keywords || []), ...(res.panic_keywords || [])],
+        auto_escalated:   res.auto_escalated,
+      });
+      if (res.auto_escalated && res.escalation_result) setEscalationResult(res.escalation_result);
+    }
+
+    // Refresh evidence panel
+    getRecordingsForUser(1, 5).then(r => { if (r?.success) setRecordings(r.recordings); });
     setMicState('idle');
   };
+
 
   const handleAddContact = async () => {
     if (!newContact.name || !newContact.phone) return;

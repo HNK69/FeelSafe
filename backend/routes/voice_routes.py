@@ -92,20 +92,13 @@ def api_analyze_voice():
 
     # ── Full threat analysis ──────────────────────────────────────────────────
     if transcript:
-        threat_result = analyse_threat(
-            text      = transcript,
-            lat       = lat,
-            lon       = lon,
-            user_id   = user_id,
-            user_name = "FeelSafe User",
-            trip_id   = trip_id,
-        )
+        threat_result = analyse_threat(transcript)
     else:
         # Groq failed or silent recording — use panic score as fallback
         panic_score  = panic_info.get("panic_score", 0)
         threat_result = {
             "risk_level":     "HIGH" if panic_score > 0.6 else "LOW",
-            "score":          panic_score,
+            "score":          int(panic_score * 100),
             "message":        transcription.get("error", "No speech detected."),
             "action_tips":    [],
             "auto_escalated": False,

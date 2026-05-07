@@ -1,0 +1,74 @@
+[
+  {
+    "id": "zone_001",
+    "name": "Dark Alley near Central Market",
+    "lat": 28.6492,
+    "lon": 77.2050,
+    "risk": "HIGH",
+    "reason": "Poorly lit, isolated, frequent incidents reported",
+    "reports": 14
+  },
+  {
+    "id": "zone_002",
+    "name": "Underpass Road MG Road",
+    "lat": 28.6139,
+    "lon": 77.2090,
+    "risk": "HIGH",
+    "reason": "Isolated underpass, no CCTV, frequent harassment",
+    "reports": 9
+  },
+  {
+    "id": "zone_003",
+    "name": "Industrial Area Back Roads",
+    "lat": 28.6719,
+    "lon": 77.1640,
+    "risk": "MEDIUM",
+    "reason": "Deserted at night, no street lights after 9PM",
+    "reports": 6
+  },
+  {
+    "id": "zone_004",
+    "name": "Railway Colony Lane",
+    "lat": 28.6431,
+    "lon": 77.2189,
+    "risk": "MEDIUM",
+    "reason": "Community reports of suspicious activity",
+    "reports": 4
+  },
+  {
+    "id": "zone_005",
+    "name": "South Extension Park Area",
+    "lat": 28.5733,
+    "lon": 77.2195,
+    "risk": "LOW",
+    "reason": "Generally safe but be cautious after 10PM",
+    "reports": 2
+  },
+  {
+    "id": "zone_006",
+    "name": "Outer Ring Road Overpass",
+    "lat": 28.5985,
+    "lon": 77.0420,
+    "risk": "HIGH",
+    "reason": "Isolated, multiple SOS reports from women",
+    "reports": 11
+  },
+  {
+    "id": "zone_007",
+    "name": "Old Graveyard Lane",
+    "lat": 28.6563,
+    "lon": 77.1970,
+    "risk": "HIGH",
+    "reason": "No lighting, dead-end street, avoid at night",
+    "reports": 8
+  },
+  {
+    "id": "zone_008",
+    "name": "Near Deserted Mall Parking",
+    "lat": 28.6290,
+    "lon": 77.3758,
+    "risk": "MEDIUM",
+    "reason": "Isolated parking area, low foot traffic at night",
+    "reports": 5
+  }
+]

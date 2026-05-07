@@ -1,0 +1,88 @@
+[
+  {
+    "id": "route_001",
+    "name": "Connaught Place to Lajpat Nagar",
+    "origin": { "lat": 28.6315, "lon": 77.2167, "name": "Connaught Place" },
+    "destination": { "lat": 28.5677, "lon": 77.2433, "name": "Lajpat Nagar" },
+    "distance_km": 7.2,
+    "waypoints": [
+      { "lat": 28.6230, "lon": 77.2195 },
+      { "lat": 28.6100, "lon": 77.2260 },
+      { "lat": 28.5900, "lon": 77.2350 }
+    ],
+    "is_isolated": false,
+    "community_rating": 4.1,
+    "unsafe_report_count": 1,
+    "nearby_police": true,
+    "nearby_hospital": true,
+    "tags": ["well_lit", "busy_road", "cctv_present"]
+  },
+  {
+    "id": "route_002",
+    "name": "Karol Bagh to Pitampura via Ring Road",
+    "origin": { "lat": 28.6514, "lon": 77.1907, "name": "Karol Bagh" },
+    "destination": { "lat": 28.7015, "lon": 77.1330, "name": "Pitampura" },
+    "distance_km": 12.5,
+    "waypoints": [
+      { "lat": 28.6700, "lon": 77.1730 },
+      { "lat": 28.6870, "lon": 77.1550 }
+    ],
+    "is_isolated": false,
+    "community_rating": 3.7,
+    "unsafe_report_count": 3,
+    "nearby_police": true,
+    "nearby_hospital": false,
+    "tags": ["busy_road", "ring_road", "moderate_lighting"]
+  },
+  {
+    "id": "route_003",
+    "name": "Nehru Place to Noida via Dark Stretch",
+    "origin": { "lat": 28.5490, "lon": 77.2519, "name": "Nehru Place" },
+    "destination": { "lat": 28.5355, "lon": 77.3910, "name": "Noida Sector 18" },
+    "distance_km": 14.8,
+    "waypoints": [
+      { "lat": 28.5440, "lon": 77.2900 },
+      { "lat": 28.5390, "lon": 77.3300 }
+    ],
+    "is_isolated": true,
+    "community_rating": 2.3,
+    "unsafe_report_count": 7,
+    "nearby_police": false,
+    "nearby_hospital": false,
+    "tags": ["isolated_stretch", "poor_lighting", "late_night_risk"]
+  },
+  {
+    "id": "route_004",
+    "name": "Saket to Hauz Khas Safe Route",
+    "origin": { "lat": 28.5254, "lon": 77.2091, "name": "Saket" },
+    "destination": { "lat": 28.5495, "lon": 77.2065, "name": "Hauz Khas" },
+    "distance_km": 4.1,
+    "waypoints": [
+      { "lat": 28.5320, "lon": 77.2080 },
+      { "lat": 28.5430, "lon": 77.2070 }
+    ],
+    "is_isolated": false,
+    "community_rating": 4.6,
+    "unsafe_report_count": 0,
+    "nearby_police": true,
+    "nearby_hospital": true,
+    "tags": ["well_lit", "busy_market", "cctv_present", "recommended"]
+  },
+  {
+    "id": "route_005",
+    "name": "Dwarka Sector 10 to Airport",
+    "origin": { "lat": 28.5820, "lon": 77.0490, "name": "Dwarka Sector 10" },
+    "destination": { "lat": 28.5562, "lon": 77.0998, "name": "IGI Airport T3" },
+    "distance_km": 9.3,
+    "waypoints": [
+      { "lat": 28.5760, "lon": 77.0650 },
+      { "lat": 28.5660, "lon": 77.0830 }
+    ],
+    "is_isolated": false,
+    "community_rating": 4.0,
+    "unsafe_report_count": 2,
+    "nearby_police": true,
+    "nearby_hospital": true,
+    "tags": ["airport_road", "well_lit", "heavy_traffic"]
+  }
+]

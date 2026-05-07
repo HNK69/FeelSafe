@@ -1,6 +1,6 @@
 // pages/StartTrip.jsx
 // THE main trip page — 3-step unified flow with FeedbackModal + EscalationModal
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   MapPin, Navigation, Play, Square, Loader2,
@@ -11,6 +11,28 @@ import FeedbackModal from '../components/FeedbackModal';
 import EscalationModal from '../components/EscalationModal';
 import { getSafestRoute, startTrip, endTrip, analyzeThreat, analyzeVoice, getSafetyAnchors } from '../services/api';
 
+// ── localStorage helpers ───────────────────────────────────────────────────────
+const LS_KEY = 'feelsafe_trip_state';
+
+function loadTripState() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function saveTripState(patch) {
+  try {
+    const current = loadTripState() || {};
+    localStorage.setItem(LS_KEY, JSON.stringify({ ...current, ...patch, _savedAt: Date.now() }));
+  } catch {}
+}
+
+function clearTripState() {
+  try { localStorage.removeItem(LS_KEY); } catch {}
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────────
 const LOCATIONS = {
   'New Delhi Station':  { lat: 28.6429, lon: 77.2191 },
   'Connaught Place':    { lat: 28.6315, lon: 77.2167 },
@@ -29,30 +51,86 @@ const RISK_COLOR = { LOW: '#00FF9D', MEDIUM: '#FFC857', HIGH: '#FF3B5C' };
 const scoreColor = s => s >= 65 ? '#00FF9D' : s >= 40 ? '#FFC857' : '#FF3B5C';
 
 export default function StartTrip() {
-  const [step, setStep]             = useState(STEP.INPUT);
-  const [srcKey, setSrcKey]         = useState('New Delhi Station');
-  const [dstKey, setDstKey]         = useState('Lajpat Nagar');
+  // ── Hydrate from localStorage on first render ──────────────────────────────
+  const _cached = loadTripState();
+
+  const [step, setStep]             = useState(_cached?.step || STEP.INPUT);
+  const [srcKey, setSrcKey]         = useState(_cached?.srcKey || 'New Delhi Station');
+  const [dstKey, setDstKey]         = useState(_cached?.dstKey || 'Lajpat Nagar');
   const [loadingRoutes, setLoadingRoutes] = useState(false);
-  const [routeData, setRouteData]   = useState(null);
-  const [selectedRoute, setSelected] = useState(null);
-  const [activeTrip, setActiveTrip] = useState(null);
+  const [routeData, setRouteData]   = useState(_cached?.routeData || null);
+  const [selectedRoute, setSelected] = useState(_cached?.selectedRoute || null);
+  const [activeTrip, setActiveTrip] = useState(_cached?.activeTrip || null);
+  // currentPos: don't restore simulated position — it would be stale
   const [currentPos, setCurrentPos] = useState(null);
-  const [liveRisk, setLiveRisk]     = useState('LOW');
+  const [liveRisk, setLiveRisk]     = useState(_cached?.liveRisk || 'LOW');
   const [threatInput, setThreatInput] = useState('');
-  const [threatResult, setThreatResult] = useState(null);
+  const [threatResult, setThreatResult] = useState(_cached?.threatResult || null);
   const [analyzing, setAnalyzing]   = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [showEscalation, setShowEscalation] = useState(false);
   const [escalationData, setEscalationData] = useState(null);
   const [micState, setMicState]             = useState('idle');
   const [micTranscript, setMicTranscript]   = useState('');
-  const [dangerZones, setDangerZones]       = useState([]);
-  const [safetyAnchors, setSafetyAnchors]   = useState({});
-  const [escapePoint, setEscapePoint]       = useState(null);
+  const [dangerZones, setDangerZones]       = useState(_cached?.dangerZones || []);
+  const [safetyAnchors, setSafetyAnchors]   = useState(_cached?.safetyAnchors || {});
+  const [escapePoint, setEscapePoint]       = useState(_cached?.escapePoint || null);
+  // Resume banner: show when returning mid-trip
+  const [showResumeBanner, setShowResumeBanner] = useState(
+    !!_cached && (_cached.step === STEP.ROUTES || _cached.step === STEP.TRACKING)
+  );
+
   const trackRef   = useRef(null);
-  const wayptsRef  = useRef([]);
+  const wayptsRef  = useRef(_cached?.waypoints || []);
   const mediaRef   = useRef(null);
   const chunksRef  = useRef([]);
+
+  // ── Auto-save on key state changes ────────────────────────────────────────
+  useEffect(() => {
+    saveTripState({ step, srcKey, dstKey });
+  }, [step, srcKey, dstKey]);
+
+  useEffect(() => {
+    if (routeData) saveTripState({ routeData });
+  }, [routeData]);
+
+  useEffect(() => {
+    if (selectedRoute) saveTripState({ selectedRoute });
+  }, [selectedRoute]);
+
+  useEffect(() => {
+    if (activeTrip) saveTripState({ activeTrip });
+  }, [activeTrip]);
+
+  useEffect(() => {
+    saveTripState({ liveRisk });
+  }, [liveRisk]);
+
+  useEffect(() => {
+    if (dangerZones.length) saveTripState({ dangerZones });
+  }, [dangerZones]);
+
+  useEffect(() => {
+    if (Object.keys(safetyAnchors).length) saveTripState({ safetyAnchors });
+  }, [safetyAnchors]);
+
+  useEffect(() => {
+    if (escapePoint) saveTripState({ escapePoint });
+  }, [escapePoint]);
+
+  useEffect(() => {
+    if (threatResult) saveTripState({ threatResult });
+  }, [threatResult]);
+
+  // Restore waypoints ref when returning to TRACKING step
+  useEffect(() => {
+    if (step === STEP.TRACKING && _cached?.waypoints?.length && !currentPos) {
+      wayptsRef.current = _cached.waypoints;
+      setCurrentPos(_cached.waypoints[0]);
+      startSimulation(_cached.waypoints);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const src  = LOCATIONS[srcKey];
   const dest = LOCATIONS[dstKey];
@@ -88,6 +166,8 @@ export default function StartTrip() {
       setCurrentPos(wps[0]);
       setStep(STEP.TRACKING);
       startSimulation(wps);
+      // Persist waypoints so simulation restores on tab return
+      saveTripState({ waypoints: wps });
       // Set ML danger zones from route
       setDangerZones(route.danger_segments || []);
       // Auto-fetch safety anchors around midpoint for LOW safety routes
@@ -96,7 +176,6 @@ export default function StartTrip() {
         const anchorsRes = await getSafetyAnchors(mid[0], mid[1], 1500);
         if (anchorsRes?.success) {
           setSafetyAnchors(anchorsRes.anchors || {});
-          // Set escape point: prefer nearest police > hospital
           const bestAnchor = [
             ...(anchorsRes.anchors?.police   || []),
             ...(anchorsRes.anchors?.hospital || []),
@@ -131,11 +210,14 @@ export default function StartTrip() {
   };
 
   const handleFeedbackDone = () => {
+    clearTripState();  // wipe cached trip so next visit starts fresh
     setShowFeedback(false);
     setStep(STEP.INPUT);
     setActiveTrip(null); setCurrentPos(null);
     setThreatResult(null); setLiveRisk('LOW');
     setRouteData(null); setSelected(null);
+    setDangerZones([]); setSafetyAnchors({}); setEscapePoint(null);
+    setShowResumeBanner(false);
   };
 
   // ── Threat analysis with auto-escalation ──────────────────────────────────
@@ -274,7 +356,30 @@ export default function StartTrip() {
 
       {/* ── LEFT PANEL ──────────────────────────────────────────────────────── */}
       <div className="w-full md:w-2/5 flex flex-col gap-4">
+
+        {/* Resume banner */}
+        <AnimatePresence>
+          {showResumeBanner && (
+            <motion.div
+              initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              className="flex items-center gap-3 p-3 rounded-2xl border border-[#00FF9D]/40 bg-[#00FF9D]/5">
+              <Shield className="w-5 h-5 text-[#00FF9D] flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-bold text-[#00FF9D]">Resume Active Safe Trip</div>
+                <div className="text-[11px] text-gray-400 truncate">
+                  {srcKey} → {dstKey}
+                  {selectedRoute ? ` · Score ${selectedRoute.safety_score}/100` : ''}
+                </div>
+              </div>
+              <button onClick={() => setShowResumeBanner(false)}
+                className="text-gray-600 hover:text-gray-400 text-xs flex-shrink-0">✕</button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <AnimatePresence mode="wait">
+
 
           {/* STEP 1: Source / Destination input */}
           {step === STEP.INPUT && (

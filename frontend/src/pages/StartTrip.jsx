@@ -139,11 +139,38 @@ export default function StartTrip() {
   const handleAnalyzeRoutes = async () => {
     if (srcKey === dstKey) return;
     setLoadingRoutes(true);
+    // Clear all stale data so UI resets completely
     setRouteData(null);
+    setSelected(null);
+    setDangerZones([]);
+    setSafetyAnchors({});
+    setEscapePoint(null);
+    setThreatResult(null);
+    setLiveRisk('LOW');
+    wayptsRef.current = [];
     try {
       const data = await getSafestRoute(src.lat, src.lon, dest.lat, dest.lon);
       setRouteData(data);
       setStep(STEP.ROUTES);
+
+      // Always fetch safety anchors for the route midpoint (not just low-score)
+      const best = data?.safest_route;
+      if (best) {
+        // Set danger zones immediately for heatmap
+        setDangerZones(best.danger_segments || []);
+        // Midpoint between src and dest
+        const midLat = (src.lat + dest.lat) / 2;
+        const midLon = (src.lon + dest.lon) / 2;
+        const anchorsRes = await getSafetyAnchors(midLat, midLon, 2000);
+        if (anchorsRes?.success) {
+          setSafetyAnchors(anchorsRes.anchors || {});
+          const bestAnchor = [
+            ...(anchorsRes.anchors?.police   || []),
+            ...(anchorsRes.anchors?.hospital || []),
+          ].sort((a, b) => a.distance_km - b.distance_km)[0];
+          if (bestAnchor) setEscapePoint({ ...bestAnchor, category: bestAnchor.type || 'safety' });
+        }
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -151,9 +178,10 @@ export default function StartTrip() {
     }
   };
 
-  // ── Step 2 → 3: Select route and start trip ────────────────────────────────
   const handleStartTrip = async (route) => {
     setSelected(route);
+    // Update danger zones for the chosen route immediately
+    setDangerZones(route.danger_segments || []);
     try {
       const res = await startTrip(src.lat, src.lon, dest.lat, dest.lon, srcKey, dstKey, 1);
       setActiveTrip(res?.trip || { id: null, eta_minutes: 25 });
@@ -166,25 +194,21 @@ export default function StartTrip() {
       setCurrentPos(wps[0]);
       setStep(STEP.TRACKING);
       startSimulation(wps);
-      // Persist waypoints so simulation restores on tab return
-      saveTripState({ waypoints: wps });
-      // Set ML danger zones from route
-      setDangerZones(route.danger_segments || []);
-      // Auto-fetch safety anchors around midpoint for LOW safety routes
-      if ((route.safety_score || 100) < 60) {
-        const mid = wps[Math.floor(wps.length / 2)];
-        const anchorsRes = await getSafetyAnchors(mid[0], mid[1], 1500);
-        if (anchorsRes?.success) {
-          setSafetyAnchors(anchorsRes.anchors || {});
-          const bestAnchor = [
-            ...(anchorsRes.anchors?.police   || []),
-            ...(anchorsRes.anchors?.hospital || []),
-          ].sort((a, b) => a.distance_km - b.distance_km)[0];
-          if (bestAnchor) setEscapePoint({ ...bestAnchor, category: bestAnchor.type || 'safety' });
-        }
+      saveTripState({ waypoints: wps, selectedRoute: route, dangerZones: route.danger_segments || [] });
+      // Always fetch anchors around selected route midpoint
+      const mid = wps[Math.floor(wps.length / 2)];
+      const anchorsRes = await getSafetyAnchors(mid[0], mid[1], 2000);
+      if (anchorsRes?.success) {
+        setSafetyAnchors(anchorsRes.anchors || {});
+        const bestAnchor = [
+          ...(anchorsRes.anchors?.police   || []),
+          ...(anchorsRes.anchors?.hospital || []),
+        ].sort((a, b) => a.distance_km - b.distance_km)[0];
+        if (bestAnchor) setEscapePoint({ ...bestAnchor, category: bestAnchor.type || 'safety' });
       }
     } catch (e) { console.error(e); }
   };
+
 
   // ── Animated position simulation ───────────────────────────────────────────
   const startSimulation = (wps) => {
@@ -429,11 +453,21 @@ export default function StartTrip() {
             <motion.div key="routes" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }} className="flex flex-col gap-3">
               <div className="glass p-5 rounded-3xl">
-                <div className="flex justify-between items-center mb-2">
-                  <h2 className="text-xl font-bold">Choose Your Route</h2>
-                  <button onClick={() => setStep(STEP.INPUT)} className="text-xs text-gray-500 hover:text-white">← Back</button>
-                </div>
-                <p className="text-xs text-gray-400 leading-relaxed">{routeData.explanation}</p>
+              <div className="flex justify-between items-center mb-2">
+                <h2 className="text-xl font-bold">Choose Your Route</h2>
+                <button onClick={() => {
+                  setStep(STEP.INPUT);
+                  setRouteData(null);
+                  setDangerZones([]);
+                  setSafetyAnchors({});
+                  setEscapePoint(null);
+                  wayptsRef.current = [];
+                }} className="text-xs text-gray-500 hover:text-white">← Back</button>
+              </div>
+              <p className="text-xs text-[#00E5FF] font-bold mb-1">
+                {srcKey} → {dstKey}
+              </p>
+              <p className="text-xs text-gray-400 leading-relaxed">{routeData.explanation}</p>
               </div>
               {allRoutes.map((route, i) => (
                 <motion.div key={i} whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}

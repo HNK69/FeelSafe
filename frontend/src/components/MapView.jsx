@@ -1,50 +1,112 @@
-import { motion } from 'framer-motion';
-import { MapPin, Navigation } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { MapContainer, TileLayer, Marker, Polyline, Popup, Circle } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import { UNSAFE_ZONES } from '../utils/unsafeZones';
 
-export default function MapView() {
+// Fix Leaflet's default icon paths in Vite
+import iconRetinaUrl from 'leaflet/dist/images/marker-icon-2x.png';
+import iconUrl from 'leaflet/dist/images/marker-icon.png';
+import shadowUrl from 'leaflet/dist/images/marker-shadow.png';
+
+export default function MapView({ routeCoordinates, source, destination, currentPosition, markers = [] }) {
+  useEffect(() => {
+    delete L.Icon.Default.prototype._getIconUrl;
+    L.Icon.Default.mergeOptions({
+      iconRetinaUrl,
+      iconUrl,
+      shadowUrl,
+    });
+  }, []);
+
+  // Center on India
+  const defaultCenter = [20.5937, 78.9629]; 
+  const center = source ? source : defaultCenter;
+
+  const customIcon = (color) => new L.DivIcon({
+    className: 'custom-icon',
+    html: `<div style="background-color: ${color}; width: 16px; height: 16px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 10px ${color}"></div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10]
+  });
+
+  const movingIcon = new L.DivIcon({
+    className: 'moving-icon',
+    html: `<div class="w-6 h-6 bg-[#00FF9D] rounded-full border-4 border-white shadow-[0_0_15px_#00FF9D] animate-pulse"></div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12]
+  });
+
   return (
-    <div className="relative w-full h-64 md:h-96 rounded-2xl overflow-hidden border border-[#00E5FF]/20 bg-[#0B1020]">
-      {/* Mock Map Background Grid */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#151B2F_1px,transparent_1px),linear-gradient(to_bottom,#151B2F_1px,transparent_1px)] bg-[size:2rem_2rem] opacity-50"></div>
-      
-      {/* Mock Route Path */}
-      <svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg">
-        <motion.path
-          d="M 50 250 C 150 250, 150 100, 250 100 S 350 200, 450 150"
-          fill="transparent"
-          stroke="url(#gradient)"
-          strokeWidth="4"
-          initial={{ pathLength: 0 }}
-          animate={{ pathLength: 1 }}
-          transition={{ duration: 2, ease: "easeInOut" }}
-        />
-        <defs>
-          <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#00E5FF" />
-            <stop offset="100%" stopColor="#00FF9D" />
-          </linearGradient>
-        </defs>
-      </svg>
-
-      {/* Markers */}
-      <div className="absolute top-[250px] left-[50px] transform -translate-x-1/2 -translate-y-1/2">
-        <div className="w-4 h-4 bg-[#00E5FF] rounded-full neon-glow animate-pulse"></div>
-      </div>
-      <div className="absolute top-[150px] left-[450px] transform -translate-x-1/2 -translate-y-1/2">
-        <MapPin className="text-[#00FF9D] w-8 h-8 drop-shadow-[0_0_8px_rgba(0,255,157,0.8)] -mt-8" />
-      </div>
-
-      {/* Simulated Location Indicator */}
-      <motion.div
-        className="absolute top-[100px] left-[250px] transform -translate-x-1/2 -translate-y-1/2"
-        animate={{
-          scale: [1, 1.2, 1],
-          opacity: [0.8, 1, 0.8],
-        }}
-        transition={{ duration: 1.5, repeat: Infinity }}
+    <div className="w-full h-full rounded-2xl overflow-hidden relative z-0">
+      <MapContainer 
+        center={center} 
+        zoom={source ? 13 : 5} // zoom out if default India center
+        scrollWheelZoom={true}
+        className="w-full h-full z-0"
       >
-        <Navigation className="text-white w-6 h-6 rotate-45 drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]" />
-      </motion.div>
+        {/* Realistic Colored Normal Map - OpenStreetMap */}
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+
+        {/* Render Unsafe Zones */}
+        {UNSAFE_ZONES.map((zone) => {
+          const color = zone.risk === 'HIGH' ? '#FF3B5C' : zone.risk === 'MEDIUM' ? '#FFC857' : '#00E5FF';
+          return (
+            <Circle
+              key={zone.id}
+              center={[zone.lat, zone.lon]}
+              radius={zone.risk === 'HIGH' ? 800 : 500}
+              pathOptions={{
+                color: color,
+                fillColor: color,
+                fillOpacity: 0.3,
+                weight: 2
+              }}
+            >
+              <Popup>
+                <strong>{zone.name}</strong><br/>
+                Risk: {zone.risk}<br/>
+                {zone.reason}
+              </Popup>
+            </Circle>
+          );
+        })}
+        
+        {source && (
+          <Marker position={source} icon={customIcon('#00E5FF')}>
+            <Popup>Start Point</Popup>
+          </Marker>
+        )}
+        
+        {destination && (
+          <Marker position={destination} icon={customIcon('#7C4DFF')}>
+            <Popup>Destination</Popup>
+          </Marker>
+        )}
+
+        {markers.map((m, i) => (
+          <Marker key={i} position={m.position} icon={customIcon(m.color || '#FFC857')}>
+            <Popup>{m.label}</Popup>
+          </Marker>
+        ))}
+
+        {routeCoordinates && routeCoordinates.length > 0 && (
+          <Polyline 
+            positions={routeCoordinates} 
+            pathOptions={{ color: '#00E5FF', weight: 5, opacity: 0.8 }} 
+          />
+        )}
+
+        {/* Animated Moving Marker for Trip Progression */}
+        {currentPosition && (
+          <Marker position={currentPosition} icon={movingIcon}>
+            <Popup>You are here</Popup>
+          </Marker>
+        )}
+      </MapContainer>
     </div>
   );
 }

@@ -10,7 +10,7 @@ import SOSButton from '../components/SOSButton';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import {
   triggerEmergency, analyzeThreat, getContacts, addContact, deleteContact,
-  analyzeVoice, quickSOS, getSafetyAnchors, getRecordingsForUser
+  analyzeVoice, quickSOS, getRecordingsForUser
 } from '../services/api';
 import clsx from 'clsx';
 
@@ -40,10 +40,6 @@ export default function Emergency() {
   const sosChunksRef = useRef([]);
   const sosTimerRef  = useRef(null);
 
-  // Safety anchors
-  const [anchors, setAnchors]             = useState(null);
-  const [loadingAnchors, setLoadingAnchors] = useState(false);
-
   // Recordings
   const [recordings, setRecordings]       = useState([]);
 
@@ -52,15 +48,9 @@ export default function Emergency() {
     getRecordingsForUser(1, 5).then(r => { if (r?.success) setRecordings(r.recordings); });
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        pos => {
-          const loc = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-          setUserLocation(loc);
-          loadAnchors(loc.lat, loc.lon);
-        },
-        () => loadAnchors(28.6315, 77.2167)
+        pos => setUserLocation({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+        () => {}
       );
-    } else {
-      loadAnchors(28.6315, 77.2167);
     }
   }, []);
 
@@ -69,26 +59,7 @@ export default function Emergency() {
     if (res?.success) setContacts(res.contacts);
   };
 
-  const loadAnchors = async (lat, lon) => {
-    setLoadingAnchors(true);
-    setAnchors(null);  // clear stale data before each fetch
-    try {
-      const res = await getSafetyAnchors(lat, lon, 2000);
-      if (res?.success && res.total_found > 0) {
-        setAnchors(res);
-      } else {
-        // Widen and retry once
-        const res2 = await getSafetyAnchors(lat, lon, 5000);
-        setAnchors(res2?.success ? res2 : { success: true, anchors: {}, total_found: 0 });
-      }
-    } catch {
-      setAnchors({ success: true, anchors: {}, total_found: 0 });
-    } finally {
-      setLoadingAnchors(false);
-    }
-  };
 
-  // ── Auto emergency recording (30s) ─────────────────────────────────────────
   const startEmergencyRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -286,15 +257,6 @@ export default function Emergency() {
               </div>
               <span className="font-bold text-sm">Share Live</span>
             </motion.button>
-
-            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-              onClick={() => { if (loadingAnchors) return; loadAnchors(userLocation.lat, userLocation.lon); }}
-              className="flex flex-col items-center gap-2 bg-black/50 border border-gray-700 p-4 rounded-2xl hover:border-[#00FF9D] group">
-              <div className="bg-[#00FF9D]/20 p-3 rounded-full">
-                <MapPin className="w-5 h-5 text-[#00FF9D]" />
-              </div>
-              <span className="font-bold text-sm">Find Safety</span>
-            </motion.button>
           </div>
 
           {/* Escalation result */}
@@ -314,76 +276,6 @@ export default function Emergency() {
               </motion.div>
             )}
           </AnimatePresence>
-
-          {/* Safety Anchors */}
-          <AnimatePresence>
-            {(loadingAnchors || anchors) && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                className="w-full glass p-4 rounded-2xl border border-gray-800">
-                <h3 className="font-bold text-sm mb-3 flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-[#00FF9D]" />
-                  <span className="text-[#00FF9D]">Nearby Safety</span>
-                  {loadingAnchors && <Loader2 className="w-3 h-3 animate-spin text-gray-400 ml-auto" />}
-                  {anchors && !loadingAnchors && (
-                    <span className="ml-auto text-[10px] text-gray-500">{anchors.total_found} found</span>
-                  )}
-                </h3>
-                {anchors && (
-                  <div className="space-y-2">
-                    {(['police','hospital','pharmacy','metro_station','public_safe_zone']).flatMap(type => {
-                      const cfg = {
-                        police:           { icon: '🚔', color: '#3B82F6', label: 'Police' },
-                        hospital:         { icon: '🏥', color: '#EF4444', label: 'Hospital' },
-                        pharmacy:         { icon: '💊', color: '#8B5CF6', label: 'Pharmacy' },
-                        metro_station:    { icon: '🚇', color: '#F59E0B', label: 'Metro' },
-                        public_safe_zone: { icon: '🛡', color: '#00FF9D', label: 'Safe Zone' },
-                      }[type] || { icon: '📍', color: '#FFC857', label: type };
-                      return (anchors.anchors?.[type] || []).slice(0, 2).map((item, i) => (
-                        <div key={`${type}-${i}`}
-                          className="p-2.5 bg-black/30 rounded-xl border border-gray-800 hover:border-gray-600 transition-colors">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="text-base flex-shrink-0">{item.icon || cfg.icon}</span>
-                              <div className="min-w-0">
-                                <div className="text-xs font-bold text-white truncate">{item.name}</div>
-                                <div className="flex items-center gap-1.5 mt-0.5">
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold"
-                                    style={{ background: `${cfg.color}22`, color: cfg.color }}>
-                                    {cfg.label}
-                                  </span>
-                                  <span className="text-[10px] text-gray-500">{item.distance_km} km</span>
-                                  {item.open_24x7 && (
-                                    <span className="text-[10px] text-[#00FF9D]">24/7</span>
-                                  )}
-                                </div>
-                                {item.address && (
-                                  <div className="text-[10px] text-gray-600 truncate mt-0.5">{item.address}</div>
-                                )}
-                              </div>
-                            </div>
-                            <a href={item.navigate_url || `https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lon}`}
-                              target="_blank" rel="noreferrer"
-                              className="flex-shrink-0 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-colors"
-                              style={{ background: '#00FF9D22', color: '#00FF9D', border: '1px solid #00FF9D44' }}
-                              onMouseEnter={e => { e.target.style.background='#00FF9D'; e.target.style.color='#000'; }}
-                              onMouseLeave={e => { e.target.style.background='#00FF9D22'; e.target.style.color='#00FF9D'; }}>
-                              🧭 Go
-                            </a>
-                          </div>
-                        </div>
-                      ));
-                    })}
-                    {anchors.total_found === 0 && !loadingAnchors && (
-                      <p className="text-xs text-gray-500 text-center py-2">
-                        Searching wider area...
-                      </p>
-                    )}
-                  </div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
 
           {/* Emergency Contacts */}
           <div className="w-full glass p-4 rounded-2xl">

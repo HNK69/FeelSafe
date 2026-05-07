@@ -1,107 +1,159 @@
-const API_BASE_URL = 'http://localhost:5000';
+// services/api.js
+// Complete FeelSafe API service layer — all calls go through here.
 
-/**
- * Reusable fetch wrapper with error handling and optional fallback data
- */
-async function apiCall(endpoint, options = {}, fallbackData = null) {
+const API_BASE = 'http://localhost:5000';
+
+async function apiCall(endpoint, options = {}, fallback = null) {
   try {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+      headers: { 'Content-Type': 'application/json', ...options.headers },
       ...options,
     });
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    const data = await response.json();
-    console.log(`✅ Backend response for ${endpoint}:`, data);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
     return data;
-  } catch (error) {
-    console.error(`❌ API Call failed for ${endpoint}:`, error.message);
-    if (fallbackData !== null) {
-      console.warn('Using fallback data instead due to backend failure.');
-      return fallbackData;
-    }
-    throw error;
+  } catch (err) {
+    console.error(`[API] ${endpoint} failed:`, err.message);
+    if (fallback !== null) return fallback;
+    throw err;
   }
 }
 
-export const startTrip = async (tripData) => {
-  return apiCall('/api/start-trip', {
-    method: 'POST',
-    body: JSON.stringify(tripData),
-  }, {
-    trip_id: 'demo-trip-001',
-    status: 'success',
-    eta: '22 mins',
-    safety_score: 88
-  });
-};
+// ── Health ────────────────────────────────────────────────────────────────────
+export const checkHealth = () =>
+  apiCall('/health', {}, { status: 'offline' });
 
-export const analyzeThreat = async (text) => {
-  return apiCall('/api/analyze-threat', {
+// ── Threat ────────────────────────────────────────────────────────────────────
+export const analyzeThreat = (text, lat = null, lon = null, userId = 1, userName = 'FeelSafe User', tripId = null) =>
+  apiCall('/api/analyze-threat', {
     method: 'POST',
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, lat, lon, user_id: userId, user_name: userName, trip_id: tripId }),
   }, {
+    success: true,
     risk_level: 'LOW',
-    confidence: 0.05,
-    threat_score: 5,
-    score: 5,
-    reason: 'No significant threat indicators detected.',
+    message: 'Unable to connect to backend.',
+    score: 0,
     matched_keywords: [],
-    action_tips: ['Stay aware of your surroundings.'],
-    categories: []
+    action_tips: [],
+    auto_escalated: false,
+    escalation_result: null,
   });
-};
 
-export const safestRoute = async ({ origin_lat, origin_lon, dest_lat, dest_lon }) => {
-  return apiCall('/api/safest-route', {
+// ── Trip ──────────────────────────────────────────────────────────────────────
+export const startTrip = (originLat, originLon, destLat, destLon, originName = '', destName = '', userId = 1) =>
+  apiCall('/api/start-trip', {
     method: 'POST',
-    body: JSON.stringify({ origin_lat, origin_lon, dest_lat, dest_lon }),
+    body: JSON.stringify({
+      origin_lat: originLat, origin_lon: originLon,
+      dest_lat: destLat,     dest_lon: destLon,
+      origin_name: originName, dest_name: destName,
+      user_id: userId,
+    }),
+  });
+
+export const endTrip = (tripId) =>
+  apiCall('/api/end-trip', {
+    method: 'POST',
+    body: JSON.stringify({ trip_id: tripId }),
+  });
+
+export const checkDeviation = (tripId, currentLat, currentLon) =>
+  apiCall('/api/check-deviation', {
+    method: 'POST',
+    body: JSON.stringify({ trip_id: tripId, current_lat: currentLat, current_lon: currentLon }),
+  });
+
+export const getTrip = (tripId) =>
+  apiCall(`/api/trip/${tripId}`);
+
+export const getActiveTrips = (userId = null) =>
+  apiCall(`/api/active-trips${userId ? `?user_id=${userId}` : ''}`);
+
+export const getTripHistory = (userId = 1, limit = 10) =>
+  apiCall(`/api/trip-history?user_id=${userId}&limit=${limit}`, {}, {
+    success: true,
+    trips: [],
+    count: 0,
+  });
+
+// ── SafeRoute ─────────────────────────────────────────────────────────────────
+export const getSafestRoute = (originLat, originLon, destLat, destLon) =>
+  apiCall('/api/safest-route', {
+    method: 'POST',
+    body: JSON.stringify({ origin_lat: originLat, origin_lon: originLon, dest_lat: destLat, dest_lon: destLon }),
   }, {
-    safest_route: {
-      id: 'fallback',
-      name: 'Main Highway (Fallback)',
-      safety_score: 75,
-      safety_label: 'Safe',
-      distance_km: 14.2,
-      nearby_police: true,
-      nearby_hospital: false,
-      tags: ['busy_road'],
-      safety_factors: ['Police station nearby (+22)', 'Community rating: 3.8/5 (+9)'],
-      description: 'Main road via India Gate — generally well-lit and busy.'
-    },
+    success: true,
+    safest_route: { name: 'Main Road', safety_score: 75, safety_label: 'Safe', distance_km: 8, explanation: 'Fallback route.' },
+    shortest_route: { name: 'Direct Route', safety_score: 55, safety_label: 'Moderate', distance_km: 5 },
+    alternative_routes: [],
     all_routes_ranked: [],
-    explanation: 'Route evaluated using current safety conditions. Backend offline — showing estimated data.',
+    explanation: 'Backend unavailable.',
+    route_count: 1,
   });
-};
 
-export const submitFeedback = async (feedbackData) => {
-  return apiCall('/api/submit-route-feedback', {
+export const submitRouteFeedback = (routeId, rating, isUnsafe = false, comment = '') =>
+  apiCall('/api/submit-route-feedback', {
     method: 'POST',
-    body: JSON.stringify(feedbackData),
-  }, { success: true, message: 'Feedback noted (offline mode).' });
-};
-
-export const getRouteStats = async (routeId) => {
-  return apiCall(`/api/route-stats/${routeId}`, {}, {
-    route_stats: { avg_rating: 0, total_ratings: 0, unsafe_report_count: 0 }
+    body: JSON.stringify({ route_id: routeId, rating, is_unsafe_report: isUnsafe, comment }),
   });
-};
 
-export const emergencyAlert = async (locationData) => {
-  return apiCall('/api/emergency-alert', {
+export const getRouteStats = (routeId) =>
+  apiCall(`/api/route-stats/${routeId}`);
+
+// ── Emergency ─────────────────────────────────────────────────────────────────
+export const triggerEmergency = (lat, lon, userId = 1, userName = 'FeelSafe User', tripId = null, contactPhone = null, riskLevel = 'HIGH', threatText = '') =>
+  apiCall('/api/emergency-alert', {
     method: 'POST',
-    body: JSON.stringify(locationData),
+    body: JSON.stringify({ lat, lon, user_id: userId, user_name: userName, trip_id: tripId, contact_phone: contactPhone, risk_level: riskLevel, threat_text: threatText }),
   }, {
-    status: 'Alert Sent',
-    alert_id: 'SOS-DEMO',
-    notified: ['Emergency Contacts', 'Authorities']
+    success: true,
+    whatsapp_link: `https://wa.me/?text=EMERGENCY+ALERT`,
+    maps_link: `https://www.google.com/maps?q=${lat},${lon}`,
+    emergency_numbers: { police: '100', ambulance: '108', women_helpline: '1091', national_emergency: '112' },
+    nearby_police: [],
+    nearby_hospitals: [],
+    auto_contacts_notified: [],
+    escalation_level: 1,
   });
-};
 
-export const checkHealth = async () => {
-  return apiCall('/health', {}, { status: 'offline' });
-};
+export const retryEmergency = (lat, lon, previousAttempt, userId = 1) =>
+  apiCall('/api/emergency-retry', {
+    method: 'POST',
+    body: JSON.stringify({ lat, lon, previous_attempt: previousAttempt, user_id: userId }),
+  });
+
+// ── Contacts ──────────────────────────────────────────────────────────────────
+export const getContacts = (userId = 1) =>
+  apiCall(`/api/contacts?user_id=${userId}`, {}, { success: true, contacts: [], count: 0 });
+
+export const addContact = (name, phone, relation = 'Contact', mediumAlert = true, highAlert = true, userId = 1) =>
+  apiCall('/api/contacts', {
+    method: 'POST',
+    body: JSON.stringify({ name, phone, relation, medium_alert_enabled: mediumAlert, high_alert_enabled: highAlert, user_id: userId }),
+  });
+
+export const updateContact = (contactId, updates) =>
+  apiCall(`/api/contacts/${contactId}`, {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+
+export const deleteContact = (contactId) =>
+  apiCall(`/api/contacts/${contactId}`, { method: 'DELETE' });
+
+// ── Community ─────────────────────────────────────────────────────────────────
+export const getCommunityFeed = (limit = 10) =>
+  apiCall(`/api/community/feed?limit=${limit}`, {}, {
+    success: true,
+    feed: [
+      { area: 'Connaught Place', issue: 'Safe zone — CCTV active', severity: 'LOW', color: '#00FF9D', time: '2 min ago', source: 'community_intel' },
+      { area: 'MG Road Underpass', issue: 'Poor lighting reported', severity: 'HIGH', color: '#FF3B5C', time: '15 min ago', source: 'community_intel' },
+    ],
+    count: 2,
+  });
+
+export const getCommunityStats = (userId = 1) =>
+  apiCall(`/api/community/stats?user_id=${userId}`, {}, {
+    success: true,
+    stats: { total_trips: 0, active_trips: 0, sos_alerts: 0, community_reports: 0, avg_safety_score: 72 },
+  });

@@ -1,112 +1,185 @@
-import React, { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Polyline, Popup, Circle } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import { UNSAFE_ZONES } from '../utils/unsafeZones';
+// components/MapView.jsx
+// Enhanced: dynamic route color, pulsing unsafe zones, animated marker, riskLevel prop
+import React, { useEffect, useRef } from "react";
+import { MapContainer, TileLayer, Marker, Polyline, Popup, Circle, useMap } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
-// Fix Leaflet's default icon paths in Vite
-import iconRetinaUrl from 'leaflet/dist/images/marker-icon-2x.png';
-import iconUrl from 'leaflet/dist/images/marker-icon.png';
-import shadowUrl from 'leaflet/dist/images/marker-shadow.png';
+// Fix Leaflet default marker icons (Vite/webpack asset issue)
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl:       "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl:     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
 
-export default function MapView({ routeCoordinates, source, destination, currentPosition, markers = [], routeColor = '#00E5FF' }) {
+// ── Custom SVG icons ──────────────────────────────────────────────────────────
+const makeIcon = (color, size = 32, pulse = false) => L.divIcon({
+  className: "",
+  html: `<div style="
+    width:${size}px;height:${size}px;border-radius:50%;
+    background:${color};border:3px solid white;
+    box-shadow:0 0 12px ${color},0 0 24px ${color}44;
+    ${pulse ? 'animation:ping 1.5s cubic-bezier(0,0,0.2,1) infinite;' : ''}
+  "></div>`,
+  iconSize:   [size, size],
+  iconAnchor: [size / 2, size / 2],
+});
+
+const SOURCE_ICON   = makeIcon('#00E5FF', 20);
+const DEST_ICON     = makeIcon('#00FF9D', 20);
+const USER_ICON_LOW  = makeIcon('#00FF9D', 24, true);
+const USER_ICON_MED  = makeIcon('#FFC857', 24, true);
+const USER_ICON_HIGH = makeIcon('#FF3B5C', 24, true);
+
+const getUserIcon = (riskLevel) => {
+  if (riskLevel === 'HIGH')   return USER_ICON_HIGH;
+  if (riskLevel === 'MEDIUM') return USER_ICON_MED;
+  return USER_ICON_LOW;
+};
+
+// ── Unsafe zone markers (static Delhi data) ───────────────────────────────────
+const UNSAFE_ZONES = [
+  { lat: 28.6492, lon: 77.2050, name: "Caution Zone" },
+  { lat: 28.5680, lon: 77.2700, name: "Low Lighting Area" },
+  { lat: 28.6200, lon: 77.1900, name: "Isolated Stretch" },
+];
+
+// ── Auto-fit map bounds ───────────────────────────────────────────────────────
+function FitBounds({ positions }) {
+  const map = useMap();
   useEffect(() => {
-    delete L.Icon.Default.prototype._getIconUrl;
-    L.Icon.Default.mergeOptions({
-      iconRetinaUrl,
-      iconUrl,
-      shadowUrl,
-    });
-  }, []);
+    if (positions && positions.length >= 2) {
+      const valid = positions.filter(p => p && p[0] != null && p[1] != null);
+      if (valid.length >= 2) {
+        try { map.fitBounds(valid, { padding: [40, 40], maxZoom: 14 }); } catch {}
+      }
+    }
+  }, [positions, map]);
+  return null;
+}
 
-  // Center on India
-  const defaultCenter = [20.5937, 78.9629]; 
-  const center = source ? source : defaultCenter;
+// ── Smooth camera follow ──────────────────────────────────────────────────────
+function CameraFollow({ position }) {
+  const map = useMap();
+  const prev = useRef(null);
+  useEffect(() => {
+    if (position && position[0] != null) {
+      if (!prev.current) {
+        map.setView(position, map.getZoom(), { animate: true });
+      } else {
+        map.panTo(position, { animate: true, duration: 1.2 });
+      }
+      prev.current = position;
+    }
+  }, [position, map]);
+  return null;
+}
 
-  const customIcon = (color) => new L.DivIcon({
-    className: 'custom-icon',
-    html: `<div style="background-color: ${color}; width: 16px; height: 16px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 10px ${color}"></div>`,
-    iconSize: [20, 20],
-    iconAnchor: [10, 10]
-  });
+export default function MapView({
+  source           = null,
+  destination      = null,
+  routeCoordinates = [],
+  currentPosition  = null,
+  markers          = [],
+  routeColor       = '#00E5FF',
+  riskLevel        = 'LOW',
+  showUnsafeZones  = true,
+}) {
+  const defaultCenter = source || [28.6315, 77.2167]; // Delhi CP fallback
+  const validRoute    = routeCoordinates.filter(c => c && c[0] != null && c[1] != null);
 
-  const movingIcon = new L.DivIcon({
-    className: 'moving-icon',
-    html: `<div class="w-6 h-6 bg-[#00FF9D] rounded-full border-4 border-white shadow-[0_0_15px_#00FF9D] animate-pulse"></div>`,
-    iconSize: [24, 24],
-    iconAnchor: [12, 12]
-  });
+  // Route dash pattern changes by risk
+  const dashArray = riskLevel === 'HIGH' ? '6 8' : riskLevel === 'MEDIUM' ? '10 6' : null;
+
+  // All positions for bounds fitting
+  const allPositions = [
+    source, destination,
+    ...(validRoute.length > 0 ? [validRoute[0], validRoute[validRoute.length - 1]] : []),
+  ].filter(Boolean);
+
+  // Unsafe zone pulse color
+  const zoneColor = riskLevel === 'HIGH' ? '#FF3B5C' : riskLevel === 'MEDIUM' ? '#FFC857' : '#FFC857';
 
   return (
-    <div className="w-full h-full rounded-2xl overflow-hidden relative z-0">
-      <MapContainer 
-        center={center} 
-        zoom={source ? 13 : 5} // zoom out if default India center
-        scrollWheelZoom={true}
-        className="w-full h-full z-0"
-      >
-        {/* Realistic Colored Normal Map - OpenStreetMap */}
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+    <MapContainer
+      center={defaultCenter}
+      zoom={13}
+      scrollWheelZoom={true}
+      style={{ height: "100%", width: "100%", borderRadius: "1.5rem", background: "#0B1020" }}
+      zoomControl={false}
+    >
+      {/* Dark map tiles */}
+      <TileLayer
+        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+      />
+
+      {/* Auto-fit */}
+      {!currentPosition && allPositions.length >= 2 && (
+        <FitBounds positions={allPositions} />
+      )}
+
+      {/* Camera follow during trip */}
+      {currentPosition && <CameraFollow position={currentPosition} />}
+
+      {/* Route polyline */}
+      {validRoute.length >= 2 && (
+        <Polyline
+          positions={validRoute}
+          pathOptions={{ color: routeColor, weight: 5, opacity: 0.9, dashArray }}
         />
+      )}
 
-        {/* Render Unsafe Zones */}
-        {UNSAFE_ZONES.map((zone) => {
-          const color = zone.risk === 'HIGH' ? '#FF3B5C' : zone.risk === 'MEDIUM' ? '#FFC857' : '#00E5FF';
-          return (
-            <Circle
-              key={zone.id}
-              center={[zone.lat, zone.lon]}
-              radius={zone.risk === 'HIGH' ? 800 : 500}
-              pathOptions={{
-                color: color,
-                fillColor: color,
-                fillOpacity: 0.3,
-                weight: 2
-              }}
-            >
-              <Popup>
-                <strong>{zone.name}</strong><br/>
-                Risk: {zone.risk}<br/>
-                {zone.reason}
-              </Popup>
-            </Circle>
-          );
-        })}
-        
-        {source && (
-          <Marker position={source} icon={customIcon('#00E5FF')}>
-            <Popup>Start Point</Popup>
-          </Marker>
-        )}
-        
-        {destination && (
-          <Marker position={destination} icon={customIcon('#7C4DFF')}>
-            <Popup>Destination</Popup>
-          </Marker>
-        )}
+      {/* Source marker */}
+      {source && (
+        <Marker position={source} icon={SOURCE_ICON}>
+          <Popup><b style={{ color: '#00E5FF' }}>Start</b></Popup>
+        </Marker>
+      )}
 
-        {markers.map((m, i) => (
-          <Marker key={i} position={m.position} icon={customIcon(m.color || '#FFC857')}>
-            <Popup>{m.label}</Popup>
-          </Marker>
-        ))}
+      {/* Destination marker */}
+      {destination && (
+        <Marker position={destination} icon={DEST_ICON}>
+          <Popup><b style={{ color: '#00FF9D' }}>Destination</b></Popup>
+        </Marker>
+      )}
 
-        {routeCoordinates && routeCoordinates.length > 0 && (
-          <Polyline 
-            positions={routeCoordinates} 
-            pathOptions={{ color: routeColor, weight: 5, opacity: 0.85 }} 
+      {/* Moving user marker */}
+      {currentPosition && (
+        <Marker position={currentPosition} icon={getUserIcon(riskLevel)} zIndexOffset={1000}>
+          <Popup>
+            <b style={{ color: riskLevel === 'HIGH' ? '#FF3B5C' : riskLevel === 'MEDIUM' ? '#FFC857' : '#00FF9D' }}>
+              You are here ({riskLevel} risk)
+            </b>
+          </Popup>
+        </Marker>
+      )}
+
+      {/* Unsafe zone circles (pulsing effect via two stacked circles) */}
+      {showUnsafeZones && UNSAFE_ZONES.map((z, i) => (
+        <React.Fragment key={i}>
+          <Circle
+            center={[z.lat, z.lon]}
+            radius={350}
+            pathOptions={{ color: zoneColor, fillColor: zoneColor, fillOpacity: 0.08, weight: 1.5 }}
           />
-        )}
+          <Circle
+            center={[z.lat, z.lon]}
+            radius={180}
+            pathOptions={{ color: zoneColor, fillColor: zoneColor, fillOpacity: 0.15, weight: 0 }}
+          >
+            <Popup><b style={{ color: zoneColor }}>{z.name}</b><br/>Community-reported unsafe area</Popup>
+          </Circle>
+        </React.Fragment>
+      ))}
 
-        {/* Animated Moving Marker for Trip Progression */}
-        {currentPosition && (
-          <Marker position={currentPosition} icon={movingIcon}>
-            <Popup>You are here</Popup>
-          </Marker>
-        )}
-      </MapContainer>
-    </div>
+      {/* Extra markers (e.g. police, hospitals) */}
+      {markers.map((m, i) => (
+        <Marker key={i} position={m.position} icon={makeIcon(m.color || '#FFC857', 16)}>
+          {m.label && <Popup>{m.label}</Popup>}
+        </Marker>
+      ))}
+    </MapContainer>
   );
 }

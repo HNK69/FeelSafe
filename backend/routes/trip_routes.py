@@ -17,6 +17,7 @@ from services.trip_service import (
     get_trip_by_id,
     check_deviation,
     get_active_trips,
+    get_trip_history,
 )
 from utils.helpers import error_response, require_fields
 
@@ -150,4 +151,20 @@ def api_active_trips():
     """Return all currently active trips (optionally filter by user_id query param)."""
     user_id = request.args.get("user_id", type=int)
     trips   = get_active_trips(user_id)
+    return jsonify({"success": True, "trips": trips, "count": len(trips)}), 200
+
+
+# ── Trip History ──────────────────────────────────────────────────────────────
+@trip_bp.route("/trip-history", methods=["GET"])
+def api_trip_history():
+    """
+    Return completed trips for a user, joined with any route feedback.
+
+    Query params:
+        user_id (int, optional)
+        limit   (int, default 10)
+    """
+    user_id = request.args.get("user_id", type=int)
+    limit   = request.args.get("limit", 10, type=int)
+    trips   = get_trip_history(user_id=user_id, limit=limit)
     return jsonify({"success": True, "trips": trips, "count": len(trips)}), 200

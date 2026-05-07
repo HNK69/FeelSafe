@@ -32,46 +32,90 @@ from models.feedback_model import get_route_stats
 
 def get_route_danger_segments(route: dict) -> list:
     """
-    Extract dangerous waypoints from a scored route for ML-based rendering.
-    Returns a list of {lat, lon, score, name} — used by MapView dangerZones prop
-    and by anchor_service to search OSM around risky areas only.
+    Extract dangerous waypoints from a scored route for MapView dangerZones rendering.
+
+    Sources (merged):
+    1. Route waypoints that score < 55 (ML-derived per-segment danger)
+    2. unsafe_zones.json entries near any route point (restores heatmap)
+
+    Returns [{lat, lon, score, name, radius}]
     """
+    import math as _math
+
+    origin  = route.get("origin", {})
+    dest    = route.get("destination", {})
     waypoints = route.get("waypoints", [])
-    origin = route.get("origin", {})
-    dest   = route.get("destination", {})
-    all_points = [
-        {"lat": origin.get("lat"), "lon": origin.get("lon"), "label": "Origin"},
-        *[{"lat": w["lat"], "lon": w["lon"], "label": f"WP{i+1}"} for i, w in enumerate(waypoints)],
-        {"lat": dest.get("lat"), "lon": dest.get("lon"), "label": "Destination"},
-    ]
+
+    # Build route point list including interpolated midpoint
+    route_points = []
+    if origin.get("lat"):
+        route_points.append({"lat": origin["lat"], "lon": origin["lon"]})
+    for w in waypoints:
+        if w.get("lat"):
+            route_points.append({"lat": w["lat"], "lon": w["lon"]})
+    if dest.get("lat"):
+        route_points.append({"lat": dest["lat"], "lon": dest["lon"]})
+
+    # Interpolate midpoint if only 2 points
+    if len(route_points) == 2:
+        mid = {
+            "lat": (route_points[0]["lat"] + route_points[1]["lat"]) / 2,
+            "lon": (route_points[0]["lon"] + route_points[1]["lon"]) / 2,
+        }
+        route_points.insert(1, mid)
+
+    if not route_points:
+        return []
 
     safety_score = route.get("safety_score", 50)
     tags         = route.get("tags", [])
     is_isolated  = route.get("is_isolated", False)
 
-    # Assign per-segment danger: isolated + low score = danger zone
+    # ── Source 1: Route waypoints with local danger scoring ───────────────────
     danger_segments = []
-    for pt in all_points:
-        if pt["lat"] is None:
-            continue
-        # Local danger: isolated stretch or poor lighting tags + route score
-        local_danger = safety_score
-        if is_isolated:
-            local_danger -= 15
-        if "poor_lighting" in tags or "dark_stretch" in tags:
-            local_danger -= 10
-        if "isolated_stretch" in tags:
-            local_danger -= 10
-        local_danger = max(0, min(100, local_danger))
-
-        # Only expose as danger zone if score < 55
-        if local_danger < 55:
+    for pt in route_points:
+        local = safety_score
+        if is_isolated:            local -= 15
+        if "poor_lighting" in tags or "dark_stretch" in tags: local -= 10
+        if "isolated_stretch" in tags: local -= 10
+        local = max(0, min(100, local))
+        if local < 55:
             danger_segments.append({
-                "lat":   pt["lat"],
-                "lon":   pt["lon"],
-                "score": local_danger,
-                "name":  f"{route.get('name','Route')} — {pt['label']}",
+                "lat":    pt["lat"],
+                "lon":    pt["lon"],
+                "score":  local,
+                "name":   f"{route.get('name', 'Route')} — Risk Zone",
+                "radius": max(180, int((55 - local) * 8)),
             })
+
+    # ── Source 2: unsafe_zones.json near any route point (heatmap restore) ────
+    _RISK_SCORE = {"HIGH": 15, "MEDIUM": 38, "LOW": 52}
+    seen_ids = set()
+
+    for zone in UNSAFE_ZONES:
+        z_lat = zone.get("lat")
+        z_lon = zone.get("lon")
+        if z_lat is None:
+            continue
+        # Check proximity to any route point (within 3 km)
+        for rp in route_points:
+            dist = _math.sqrt(
+                (z_lat - rp["lat"]) ** 2 + (z_lon - rp["lon"]) ** 2
+            ) * 111  # rough km
+            if dist <= 3.0 and zone.get("id") not in seen_ids:
+                seen_ids.add(zone.get("id"))
+                score = _RISK_SCORE.get(zone.get("risk", "LOW"), 50)
+                reports = zone.get("reports", 1)
+                # More reports = bigger radius
+                radius = max(200, min(600, 200 + reports * 25))
+                danger_segments.append({
+                    "lat":    z_lat,
+                    "lon":    z_lon,
+                    "score":  score,
+                    "name":   zone.get("name", "Unsafe Zone"),
+                    "radius": radius,
+                })
+                break  # don't double-count same zone for multiple points
 
     return danger_segments
 

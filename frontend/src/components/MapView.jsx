@@ -48,13 +48,18 @@ const DEST_ICON      = makeIcon('#00FF9D', 22, '🟢');
 const POLICE_ICON    = makeIcon('#3B82F6', 18, '🚔');
 const HOSPITAL_ICON  = makeIcon('#EF4444', 18, '🏥');
 const PHARMACY_ICON  = makeIcon('#8B5CF6', 16, '💊');
+const METRO_ICON     = makeIcon('#F59E0B', 18, '🚇');
+const SAFEZONE_ICON  = makeIcon('#00FF9D', 16, '🛡');
 const ESCAPE_ICON    = makeIcon('#00FF9D', 26, '🛡');
+
+const ANCHOR_ICON_MAP = {
+  police: POLICE_ICON, hospital: HOSPITAL_ICON, pharmacy: PHARMACY_ICON,
+  metro_station: METRO_ICON, public_safe_zone: SAFEZONE_ICON,
+};
 
 const getUserIcon = (riskLevel) => makePulseIcon(
   riskLevel === 'HIGH' ? '#FF3B5C' : riskLevel === 'MEDIUM' ? '#FFC857' : '#00FF9D', 26
 );
-
-const ANCHOR_ICON_MAP = { police: POLICE_ICON, hospital: HOSPITAL_ICON, pharmacy: PHARMACY_ICON };
 
 // ── Auto-fit map bounds ───────────────────────────────────────────────────────
 function FitBounds({ positions }) {
@@ -183,16 +188,16 @@ export default function MapView({
         </>
       )}
 
-      {/* ML-based danger zones */}
+      {/* ML-based danger zones from unsafe_zones.json + route scoring */}
       {showUnsafeZones && dangerZones.map((z, i) => {
-        const danger = z.score !== undefined ? (1 - z.score / 100) : 0.5;
-        const radius  = Math.max(150, Math.min(500, 150 + danger * 350));
-        const opacity = 0.08 + danger * 0.12;
+        const danger  = z.score !== undefined ? (1 - z.score / 100) : 0.5;
+        const radius  = z.radius || Math.max(180, Math.min(550, 180 + danger * 370));
+        const opacity = 0.07 + danger * 0.14;
         return (
           <React.Fragment key={i}>
             <Circle center={[z.lat, z.lon]} radius={radius}
               pathOptions={{ color: zoneColor, fillColor: zoneColor, fillOpacity: opacity, weight: 1.5 }} />
-            <Circle center={[z.lat, z.lon]} radius={radius * 0.45}
+            <Circle center={[z.lat, z.lon]} radius={radius * 0.4}
               pathOptions={{ color: zoneColor, fillColor: zoneColor, fillOpacity: opacity + 0.1, weight: 0 }}>
               <Popup><b style={{ color: zoneColor }}>{z.name || 'Risk Zone'}</b><br />
                 Safety score: {z.score ?? '—'}/100
@@ -202,18 +207,32 @@ export default function MapView({
         );
       })}
 
-      {/* Safety anchor markers */}
-      {(['police', 'hospital', 'pharmacy']).flatMap(type =>
+      {/* Safety anchor markers with Navigate popups */}
+      {(['police', 'hospital', 'pharmacy', 'metro_station', 'public_safe_zone']).flatMap(type =>
         (safetyAnchors[type] || []).slice(0, 3).map((a, i) => (
           <Marker key={`${type}-${i}`} position={[a.lat, a.lon]}
             icon={ANCHOR_ICON_MAP[type] || makeIcon('#FFC857', 16)}>
             <Popup>
-              <b>{type === 'police' ? '🚔' : type === 'hospital' ? '🏥' : '💊'} {a.name}</b>
-              <br />{a.distance_km} km away
+              <div style={{ minWidth: 160 }}>
+                <b>{a.icon || ''} {a.name}</b><br />
+                <span style={{ color: '#888', fontSize: 11 }}>{a.label || type}</span><br />
+                <span style={{ fontSize: 11 }}>{a.distance_km} km away</span>
+                {a.address && <><br /><span style={{ fontSize: 10, color: '#aaa' }}>{a.address}</span></>}
+                {a.open_24x7 && <><br /><span style={{ color: '#00FF9D', fontSize: 10 }}>✓ Open 24/7</span></>}
+                <br />
+                <a href={a.navigate_url || `https://www.google.com/maps/dir/?api=1&destination=${a.lat},${a.lon}`}
+                  target="_blank" rel="noreferrer"
+                  style={{ display: 'inline-block', marginTop: 6, padding: '4px 10px',
+                    background: '#00FF9D', color: '#000', borderRadius: 6,
+                    fontWeight: 700, fontSize: 11, textDecoration: 'none' }}>
+                  🧭 Navigate
+                </a>
+              </div>
             </Popup>
           </Marker>
         ))
       )}
+
 
       {/* Escape point */}
       {escapePoint && (

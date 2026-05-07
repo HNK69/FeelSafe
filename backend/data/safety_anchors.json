@@ -1,0 +1,172 @@
+[
+  {
+    "id": "ps_001", "name": "New Delhi Railway Station PS", "category": "police",
+    "lat": 28.6430, "lon": 77.2195, "open_24x7": true, "phone": "011-23746000",
+    "safety_score": 90, "address": "New Delhi Station, Paharganj"
+  },
+  {
+    "id": "ps_002", "name": "Connaught Place Police Post", "category": "police",
+    "lat": 28.6324, "lon": 77.2188, "open_24x7": true, "phone": "100",
+    "safety_score": 88, "address": "CP Inner Circle, New Delhi"
+  },
+  {
+    "id": "ps_003", "name": "Lajpat Nagar Police Station", "category": "police",
+    "lat": 28.5675, "lon": 77.2402, "open_24x7": true, "phone": "011-29817911",
+    "safety_score": 87, "address": "Ring Rd, Lajpat Nagar II"
+  },
+  {
+    "id": "ps_004", "name": "Hauz Khas Police Station", "category": "police",
+    "lat": 28.5490, "lon": 77.2065, "open_24x7": true, "phone": "011-26862277",
+    "safety_score": 85, "address": "Sri Aurobindo Marg, Hauz Khas"
+  },
+  {
+    "id": "ps_005", "name": "Karol Bagh Police Station", "category": "police",
+    "lat": 28.6519, "lon": 77.1909, "open_24x7": true, "phone": "011-28751000",
+    "safety_score": 86, "address": "Arya Samaj Rd, Karol Bagh"
+  },
+  {
+    "id": "ps_006", "name": "Saket Police Station", "category": "police",
+    "lat": 28.5200, "lon": 77.2070, "open_24x7": true, "phone": "011-29531547",
+    "safety_score": 84, "address": "Press Enclave Marg, Saket"
+  },
+  {
+    "id": "ps_007", "name": "Paharganj Police Chowki", "category": "police",
+    "lat": 28.6448, "lon": 77.2132, "open_24x7": true, "phone": "100",
+    "safety_score": 82, "address": "Main Bazar, Paharganj"
+  },
+  {
+    "id": "ps_008", "name": "Defence Colony Police Post", "category": "police",
+    "lat": 28.5720, "lon": 77.2288, "open_24x7": true, "phone": "100",
+    "safety_score": 85, "address": "Defence Colony, New Delhi"
+  },
+  {
+    "id": "h_001", "name": "Ram Manohar Lohia Hospital", "category": "hospital",
+    "lat": 28.6378, "lon": 77.2072, "open_24x7": true, "phone": "011-23365525",
+    "safety_score": 95, "address": "Baba Kharak Singh Marg, New Delhi"
+  },
+  {
+    "id": "h_002", "name": "AIIMS Trauma Centre", "category": "hospital",
+    "lat": 28.5672, "lon": 77.2100, "open_24x7": true, "phone": "011-26588500",
+    "safety_score": 98, "address": "Sri Aurobindo Marg, Ansari Nagar"
+  },
+  {
+    "id": "h_003", "name": "Safdarjung Hospital", "category": "hospital",
+    "lat": 28.5687, "lon": 77.2051, "open_24x7": true, "phone": "011-26707444",
+    "safety_score": 94, "address": "Ansari Nagar West, New Delhi"
+  },
+  {
+    "id": "h_004", "name": "Max Smart Super Specialty Hospital", "category": "hospital",
+    "lat": 28.5244, "lon": 77.2090, "open_24x7": true, "phone": "011-26515050",
+    "safety_score": 92, "address": "Saket District Centre, Saket"
+  },
+  {
+    "id": "h_005", "name": "Lok Nayak Hospital", "category": "hospital",
+    "lat": 28.6384, "lon": 77.2374, "open_24x7": true, "phone": "011-23232400",
+    "safety_score": 90, "address": "Jawaharlal Nehru Marg, New Delhi"
+  },
+  {
+    "id": "h_006", "name": "Sir Ganga Ram Hospital", "category": "hospital",
+    "lat": 28.6455, "lon": 77.1900, "open_24x7": true, "phone": "011-25750000",
+    "safety_score": 93, "address": "Rajinder Nagar, New Delhi"
+  },
+  {
+    "id": "h_007", "name": "Moolchand Hospital", "category": "hospital",
+    "lat": 28.5742, "lon": 77.2336, "open_24x7": true, "phone": "011-42000000",
+    "safety_score": 89, "address": "Lajpat Nagar III, New Delhi"
+  },
+  {
+    "id": "ph_001", "name": "Apollo Pharmacy CP", "category": "pharmacy",
+    "lat": 28.6320, "lon": 77.2180, "open_24x7": true, "phone": "1860-500-0101",
+    "safety_score": 80, "address": "Connaught Place, New Delhi"
+  },
+  {
+    "id": "ph_002", "name": "Jan Aushadhi Kendra Paharganj", "category": "pharmacy",
+    "lat": 28.6452, "lon": 77.2151, "open_24x7": false, "phone": null,
+    "safety_score": 75, "address": "Paharganj, New Delhi"
+  },
+  {
+    "id": "ph_003", "name": "MedPlus Pharmacy Lajpat Nagar", "category": "pharmacy",
+    "lat": 28.5678, "lon": 77.2421, "open_24x7": false, "phone": "040-67006700",
+    "safety_score": 77, "address": "Lajpat Nagar Main Market"
+  },
+  {
+    "id": "ph_004", "name": "Netmeds Pharmacy Safdarjung", "category": "pharmacy",
+    "lat": 28.5700, "lon": 77.2095, "open_24x7": false, "phone": null,
+    "safety_score": 76, "address": "Safdarjung Enclave, New Delhi"
+  },
+  {
+    "id": "ph_005", "name": "24hr Pharmacy AIIMS Gate", "category": "pharmacy",
+    "lat": 28.5660, "lon": 77.2115, "open_24x7": true, "phone": null,
+    "safety_score": 82, "address": "AIIMS Gate 2, Ansari Nagar"
+  },
+  {
+    "id": "ph_006", "name": "Apollo Pharmacy Defence Colony", "category": "pharmacy",
+    "lat": 28.5710, "lon": 77.2280, "open_24x7": false, "phone": "1860-500-0101",
+    "safety_score": 78, "address": "Defence Colony Market, New Delhi"
+  },
+  {
+    "id": "m_001", "name": "New Delhi Metro Station", "category": "metro_station",
+    "lat": 28.6424, "lon": 77.2200, "open_24x7": false, "phone": "155370",
+    "safety_score": 92, "address": "Connaught Place - New Delhi Metro, Yellow Line"
+  },
+  {
+    "id": "m_002", "name": "Rajiv Chowk Metro Station", "category": "metro_station",
+    "lat": 28.6329, "lon": 77.2196, "open_24x7": false, "phone": "155370",
+    "safety_score": 95, "address": "Connaught Place, Blue & Yellow Line"
+  },
+  {
+    "id": "m_003", "name": "Mandi House Metro Station", "category": "metro_station",
+    "lat": 28.6252, "lon": 77.2336, "open_24x7": false, "phone": "155370",
+    "safety_score": 90, "address": "Mandi House, Blue Line"
+  },
+  {
+    "id": "m_004", "name": "Lajpat Nagar Metro Station", "category": "metro_station",
+    "lat": 28.5691, "lon": 77.2363, "open_24x7": false, "phone": "155370",
+    "safety_score": 91, "address": "Ring Road, Lajpat Nagar, Pink Line"
+  },
+  {
+    "id": "m_005", "name": "AIIMS Metro Station", "category": "metro_station",
+    "lat": 28.5680, "lon": 77.2080, "open_24x7": false, "phone": "155370",
+    "safety_score": 90, "address": "Sri Aurobindo Marg, Yellow Line"
+  },
+  {
+    "id": "m_006", "name": "INA Metro Station", "category": "metro_station",
+    "lat": 28.5757, "lon": 77.2082, "open_24x7": false, "phone": "155370",
+    "safety_score": 89, "address": "INA Market, Yellow Line"
+  },
+  {
+    "id": "m_007", "name": "Khan Market Metro Station", "category": "metro_station",
+    "lat": 28.6010, "lon": 77.2252, "open_24x7": false, "phone": "155370",
+    "safety_score": 88, "address": "Khan Market, Violet Line"
+  },
+  {
+    "id": "m_008", "name": "Hazrat Nizamuddin Metro", "category": "metro_station",
+    "lat": 28.5888, "lon": 77.2534, "open_24x7": false, "phone": "155370",
+    "safety_score": 87, "address": "Mathura Road, Pink Line"
+  },
+  {
+    "id": "p_001", "name": "Connaught Place Central Park", "category": "public_safe_zone",
+    "lat": 28.6332, "lon": 77.2175, "open_24x7": true, "phone": null,
+    "safety_score": 85, "address": "CP Inner Circle, New Delhi"
+  },
+  {
+    "id": "p_002", "name": "India Gate Public Area", "category": "public_safe_zone",
+    "lat": 28.6129, "lon": 77.2295, "open_24x7": true, "phone": null,
+    "safety_score": 88, "address": "Rajpath, New Delhi"
+  },
+  {
+    "id": "p_003", "name": "Lajpat Nagar Market", "category": "public_safe_zone",
+    "lat": 28.5683, "lon": 77.2438, "open_24x7": false, "phone": null,
+    "safety_score": 82, "address": "Central Market, Lajpat Nagar"
+  },
+  {
+    "id": "p_004", "name": "Defence Colony Market", "category": "public_safe_zone",
+    "lat": 28.5722, "lon": 77.2283, "open_24x7": false, "phone": null,
+    "safety_score": 83, "address": "Defence Colony, New Delhi"
+  },
+  {
+    "id": "p_005", "name": "South Extension Market", "category": "public_safe_zone",
+    "lat": 28.5735, "lon": 77.2194, "open_24x7": false, "phone": null,
+    "safety_score": 81, "address": "South Extension Part I, New Delhi"
+  }
+]

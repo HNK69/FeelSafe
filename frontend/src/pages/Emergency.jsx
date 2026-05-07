@@ -27,12 +27,20 @@ export default function Emergency() {
   const [addingContact, setAddingContact] = useState(false);
   const [userLocation, setUserLocation]   = useState({ lat: 28.6315, lon: 77.2167 });
 
-  // Mic state
-  const [micState, setMicState]           = useState('idle'); // idle | recording | processing
+  // Manual mic state
+  const [micState, setMicState]           = useState('idle');
   const [transcript, setTranscript]       = useState('');
   const [micError, setMicError]           = useState('');
   const mediaRecorderRef = useRef(null);
   const audioChunksRef   = useRef([]);
+
+  // Emergency auto-recording state
+  const [sosRecording, setSosRecording]   = useState(false);  // true while 30s SOS rec active
+  const [sosTimer, setSosTimer]           = useState(0);      // countdown 30→0
+  const [sosStatus, setSosStatus]         = useState('');     // status label
+  const sosMediaRef  = useRef(null);
+  const sosChunksRef = useRef([]);
+  const sosTimerRef  = useRef(null);
 
   // Safety anchors
   const [anchors, setAnchors]             = useState(null);
@@ -70,9 +78,52 @@ export default function Emergency() {
     setLoadingAnchors(false);
   };
 
+  // ── Auto emergency recording (30s) ─────────────────────────────────────────
+  const startEmergencyRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      sosChunksRef.current = [];
+      mr.ondataavailable = e => { if (e.data.size > 0) sosChunksRef.current.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        setSosRecording(false);
+        setSosStatus('Uploading & transcribing...');
+        const blob = new Blob(sosChunksRef.current, { type: 'audio/webm' });
+        const res  = await analyzeVoice(blob, { userId: 1, lat: userLocation.lat, lon: userLocation.lon });
+        if (res.transcript) { setTranscript(res.transcript); setThreatText(res.transcript); }
+        setAnalysis({
+          risk_level: res.risk_level || 'HIGH',
+          score: res.score ?? 80,
+          message: res.message || 'SOS triggered — emergency contacts notified.',
+          action_tips: res.action_tips || [],
+          matched_keywords: [...(res.matched_keywords||[]), ...(res.panic_keywords||[])],
+          auto_escalated: res.auto_escalated,
+        });
+        setSosStatus('Evidence saved');
+        getRecordingsForUser(1, 5).then(r => { if (r?.success) setRecordings(r.recordings); });
+      };
+      mr.start();
+      sosMediaRef.current = mr;
+      setSosRecording(true);
+      setSosTimer(30);
+      setSosStatus('Emergency Recording Active');
+      // countdown + auto-stop at 30s
+      let t = 30;
+      sosTimerRef.current = setInterval(() => {
+        t -= 1;
+        setSosTimer(t);
+        if (t <= 0) { clearInterval(sosTimerRef.current); mr.stop(); }
+      }, 1000);
+    } catch { setSosStatus('Mic denied — recording skipped'); }
+  };
+
   const handleSOS = async () => {
     setIsAlerting(true);
+    // 1. Kick off auto-recording immediately (non-blocking)
+    startEmergencyRecording();
     try {
+      // 2. Trigger backend emergency + escalation
       const res = await triggerEmergency(userLocation.lat, userLocation.lon, 1, 'FeelSafe User', null, null, 'HIGH', 'SOS button pressed');
       setEscalationResult(res);
       if (res?.whatsapp_link) window.open(res.whatsapp_link, '_blank');
@@ -176,6 +227,29 @@ export default function Emergency() {
             <SOSButton onClick={handleSOS} />
           </div>
 
+          {/* SOS Recording Indicator */}
+          <AnimatePresence>
+            {(sosRecording || sosStatus) && (
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+                className={clsx('w-full max-w-sm p-3 rounded-2xl border flex items-center gap-3',
+                  sosRecording ? 'border-[#FF3B5C] bg-[#FF3B5C]/10' : 'border-gray-700 bg-black/40')}>
+                {sosRecording ? (
+                  <motion.div animate={{ scale: [1, 1.3, 1] }} transition={{ repeat: Infinity, duration: 0.8 }}
+                    className="w-3 h-3 rounded-full bg-[#FF3B5C] flex-shrink-0" />
+                ) : (
+                  <Check className="w-4 h-4 text-[#00FF9D] flex-shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-bold text-white">{sosStatus}</div>
+                  {sosRecording && <div className="text-[10px] text-gray-400">Auto-stops in {sosTimer}s · uploading after</div>}
+                </div>
+                {sosRecording && (
+                  <div className="text-sm font-black tabular-nums" style={{ color: '#FF3B5C' }}>{sosTimer}s</div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Quick action grid */}
           <div className="grid grid-cols-2 gap-3 w-full max-w-sm">
             <motion.a href="tel:112" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
@@ -231,26 +305,35 @@ export default function Emergency() {
             )}
           </AnimatePresence>
 
-          {/* Safety Anchors nearby */}
-          {anchors && anchors.total_found > 0 && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-              className="w-full glass p-4 rounded-2xl border border-gray-800">
-              <h3 className="font-bold text-sm mb-3 text-[#00FF9D]">Nearby Safety Points</h3>
-              <div className="space-y-1.5">
-                {(['police', 'hospital', 'pharmacy']).map(type => {
-                  const list = anchors.anchors?.[type] || [];
-                  if (!list.length) return null;
-                  const item = list[0];
-                  return (
-                    <div key={type} className="flex items-center justify-between text-xs">
-                      <span>{item.icon} {item.name}</span>
-                      <span className="text-gray-400">{item.distance_km} km</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </motion.div>
-          )}
+          {/* Safety Anchors */}
+          <AnimatePresence>
+            {(loadingAnchors || anchors) && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                className="w-full glass p-4 rounded-2xl border border-gray-800">
+                <h3 className="font-bold text-sm mb-3 flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-[#00FF9D]" />
+                  <span className="text-[#00FF9D]">Nearby Safety</span>
+                  {loadingAnchors && <Loader2 className="w-3 h-3 animate-spin text-gray-400 ml-auto" />}
+                </h3>
+                {anchors && (
+                  <div className="space-y-1.5">
+                    {(['police','hospital','pharmacy','supermarket']).flatMap(type => {
+                      const cfg = { police:'🚔', hospital:'🏥', pharmacy:'💊', supermarket:'🛒' };
+                      return (anchors.anchors?.[type] || []).slice(0,2).map((item, i) => (
+                        <div key={`${type}-${i}`} className="flex items-center justify-between text-xs p-2 bg-black/30 rounded-xl">
+                          <span>{cfg[type]} {item.name}</span>
+                          <span className="text-gray-400 ml-2 flex-shrink-0">{item.distance_km} km</span>
+                        </div>
+                      ));
+                    })}
+                    {anchors.total_found === 0 && !loadingAnchors && (
+                      <p className="text-xs text-gray-500 text-center py-1">No results nearby — try a wider radius</p>
+                    )}
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Emergency Contacts */}
           <div className="w-full glass p-4 rounded-2xl">
@@ -418,29 +501,49 @@ export default function Emergency() {
             </AnimatePresence>
           </div>
 
-          {/* Recent voice recordings */}
-          {recordings.length > 0 && (
-            <div className="glass p-4 rounded-2xl border border-gray-800">
-              <h3 className="font-bold text-sm mb-3 text-[#7C4DFF]">Recent Voice Recordings</h3>
-              <div className="space-y-2">
-                {recordings.slice(0, 3).map(rec => (
-                  <div key={rec.id} className="flex items-start justify-between gap-3 p-2 bg-black/30 rounded-xl">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={clsx('text-[9px] font-bold px-1.5 py-0.5 rounded-full',
-                          rec.threat_level === 'HIGH' ? 'bg-[#FF3B5C]/20 text-[#FF3B5C]' :
-                          rec.threat_level === 'MEDIUM' ? 'bg-[#FFC857]/20 text-[#FFC857]' :
-                          'bg-[#00FF9D]/20 text-[#00FF9D]')}>{rec.threat_level}</span>
-                        <span className="text-[9px] text-gray-500">{new Date(rec.recorded_at).toLocaleTimeString()}</span>
-                      </div>
-                      {rec.transcript && <p className="text-xs text-gray-400 truncate">"{rec.transcript}"</p>}
-                      {rec.audio_url && <audio controls src={rec.audio_url} className="w-full mt-1 h-7" />}
+          {/* Emergency Evidence Panel */}
+          <div className="glass p-4 rounded-2xl border border-gray-800">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-sm flex items-center gap-2">
+                <Activity className="w-4 h-4 text-[#7C4DFF]" />
+                <span className="text-[#7C4DFF]">Emergency Evidence</span>
+              </h3>
+              <button onClick={() => getRecordingsForUser(1, 10).then(r => { if (r?.success) setRecordings(r.recordings); })}
+                className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors">
+                Refresh
+              </button>
+            </div>
+            {recordings.length === 0 ? (
+              <p className="text-xs text-gray-600 text-center py-3">No recordings yet — press SOS to auto-record</p>
+            ) : (
+              <div className="space-y-3">
+                {recordings.slice(0, 5).map((rec, idx) => (
+                  <div key={rec.id} className="p-3 bg-black/40 rounded-xl border border-gray-800">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-gray-500 text-[10px] font-mono">#{idx + 1}</span>
+                      <span className={clsx('text-[9px] font-bold px-2 py-0.5 rounded-full',
+                        rec.threat_level === 'HIGH' ? 'bg-[#FF3B5C]/20 text-[#FF3B5C]' :
+                        rec.threat_level === 'MEDIUM' ? 'bg-[#FFC857]/20 text-[#FFC857]' :
+                        'bg-[#00FF9D]/20 text-[#00FF9D]')}>
+                        {rec.threat_level}
+                      </span>
+                      <span className="text-[10px] text-gray-500 ml-auto">
+                        {new Date(rec.recorded_at).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}
+                      </span>
                     </div>
+                    {rec.transcript ? (
+                      <p className="text-xs text-gray-300 mb-2 italic">"{rec.transcript}"</p>
+                    ) : (
+                      <p className="text-xs text-gray-600 mb-2">No transcript available</p>
+                    )}
+                    {rec.audio_url && (
+                      <audio controls src={rec.audio_url} className="w-full h-8 rounded" />
+                    )}
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>

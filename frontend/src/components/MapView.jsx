@@ -1,5 +1,5 @@
 // components/MapView.jsx
-// Enhanced: dynamic route color, pulsing unsafe zones, animated marker, riskLevel prop
+// Enhanced: ML-based danger zones, escape route, safety anchors, multi-route, animated position
 import React, { useEffect, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Polyline, Popup, Circle, useMap } from "react-leaflet";
 import L from "leaflet";
@@ -14,36 +14,47 @@ L.Icon.Default.mergeOptions({
 });
 
 // ── Custom SVG icons ──────────────────────────────────────────────────────────
-const makeIcon = (color, size = 32, pulse = false) => L.divIcon({
+const makeIcon = (color, size = 32, label = '') => L.divIcon({
   className: "",
   html: `<div style="
     width:${size}px;height:${size}px;border-radius:50%;
     background:${color};border:3px solid white;
     box-shadow:0 0 12px ${color},0 0 24px ${color}44;
-    ${pulse ? 'animation:ping 1.5s cubic-bezier(0,0,0.2,1) infinite;' : ''}
-  "></div>`,
+    display:flex;align-items:center;justify-content:center;
+    font-size:${size * 0.45}px;line-height:1;
+  ">${label}</div>`,
   iconSize:   [size, size],
   iconAnchor: [size / 2, size / 2],
 });
 
-const SOURCE_ICON   = makeIcon('#00E5FF', 20);
-const DEST_ICON     = makeIcon('#00FF9D', 20);
-const USER_ICON_LOW  = makeIcon('#00FF9D', 24, true);
-const USER_ICON_MED  = makeIcon('#FFC857', 24, true);
-const USER_ICON_HIGH = makeIcon('#FF3B5C', 24, true);
+const makePulseIcon = (color, size = 24) => L.divIcon({
+  className: "",
+  html: `
+    <div style="position:relative;width:${size}px;height:${size}px;">
+      <div style="
+        position:absolute;inset:0;border-radius:50%;
+        background:${color};border:3px solid white;
+        box-shadow:0 0 16px ${color};
+        animation:pulse-ring 1.5s ease-out infinite;
+      "></div>
+      <style>@keyframes pulse-ring{0%{transform:scale(1);opacity:1}100%{transform:scale(2.2);opacity:0}}</style>
+    </div>`,
+  iconSize:   [size, size],
+  iconAnchor: [size / 2, size / 2],
+});
 
-const getUserIcon = (riskLevel) => {
-  if (riskLevel === 'HIGH')   return USER_ICON_HIGH;
-  if (riskLevel === 'MEDIUM') return USER_ICON_MED;
-  return USER_ICON_LOW;
-};
+const SOURCE_ICON    = makeIcon('#00E5FF', 22, '🔵');
+const DEST_ICON      = makeIcon('#00FF9D', 22, '🟢');
+const POLICE_ICON    = makeIcon('#3B82F6', 18, '🚔');
+const HOSPITAL_ICON  = makeIcon('#EF4444', 18, '🏥');
+const PHARMACY_ICON  = makeIcon('#8B5CF6', 16, '💊');
+const ESCAPE_ICON    = makeIcon('#00FF9D', 26, '🛡');
 
-// ── Unsafe zone markers (static Delhi data) ───────────────────────────────────
-const UNSAFE_ZONES = [
-  { lat: 28.6492, lon: 77.2050, name: "Caution Zone" },
-  { lat: 28.5680, lon: 77.2700, name: "Low Lighting Area" },
-  { lat: 28.6200, lon: 77.1900, name: "Isolated Stretch" },
-];
+const getUserIcon = (riskLevel) => makePulseIcon(
+  riskLevel === 'HIGH' ? '#FF3B5C' : riskLevel === 'MEDIUM' ? '#FFC857' : '#00FF9D', 26
+);
+
+const ANCHOR_ICON_MAP = { police: POLICE_ICON, hospital: HOSPITAL_ICON, pharmacy: PHARMACY_ICON };
 
 // ── Auto-fit map bounds ───────────────────────────────────────────────────────
 function FitBounds({ positions }) {
@@ -52,7 +63,7 @@ function FitBounds({ positions }) {
     if (positions && positions.length >= 2) {
       const valid = positions.filter(p => p && p[0] != null && p[1] != null);
       if (valid.length >= 2) {
-        try { map.fitBounds(valid, { padding: [40, 40], maxZoom: 14 }); } catch {}
+        try { map.fitBounds(valid, { padding: [50, 50], maxZoom: 15 }); } catch {}
       }
     }
   }, [positions, map]);
@@ -60,19 +71,30 @@ function FitBounds({ positions }) {
 }
 
 // ── Smooth camera follow ──────────────────────────────────────────────────────
-function CameraFollow({ position }) {
+function CameraFollow({ position, zoom }) {
   const map = useMap();
   const prev = useRef(null);
   useEffect(() => {
     if (position && position[0] != null) {
       if (!prev.current) {
-        map.setView(position, map.getZoom(), { animate: true });
+        map.setView(position, zoom || map.getZoom(), { animate: true, duration: 1 });
       } else {
         map.panTo(position, { animate: true, duration: 1.2 });
       }
       prev.current = position;
     }
-  }, [position, map]);
+  }, [position, map, zoom]);
+  return null;
+}
+
+// ── Focus on escape point ─────────────────────────────────────────────────────
+function FocusPoint({ position, zoom }) {
+  const map = useMap();
+  useEffect(() => {
+    if (position && position[0] != null) {
+      map.setView(position, zoom || 15, { animate: true, duration: 1.5 });
+    }
+  }, [position, map, zoom]);
   return null;
 }
 
@@ -80,26 +102,32 @@ export default function MapView({
   source           = null,
   destination      = null,
   routeCoordinates = [],
+  altRoutes        = [],        // [{coords:[], color, label}] — secondary routes
   currentPosition  = null,
-  markers          = [],
+  markers          = [],        // [{position, color, label, icon}]
   routeColor       = '#00E5FF',
   riskLevel        = 'LOW',
   showUnsafeZones  = true,
+  dangerZones      = [],        // [{lat,lon,radius,score,name}] from route ML
+  safetyAnchors    = {},        // {police:[],hospital:[],pharmacy:[]}
+  escapeRoute      = null,      // [[lat,lon],[lat,lon]] — HIGH danger escape path
+  escapePoint      = null,      // {lat,lon,name,category} — nearest safe point
+  focusEscape      = false,     // pan to escape point
 }) {
-  const defaultCenter = source || [28.6315, 77.2167]; // Delhi CP fallback
-  const validRoute    = routeCoordinates.filter(c => c && c[0] != null && c[1] != null);
+  const defaultCenter = source
+    ? [source[0] ?? source.lat, source[1] ?? source.lon]
+    : [28.6315, 77.2167];
 
-  // Route dash pattern changes by risk
-  const dashArray = riskLevel === 'HIGH' ? '6 8' : riskLevel === 'MEDIUM' ? '10 6' : null;
+  const srcPos  = source      ? (Array.isArray(source)      ? source      : [source.lat,      source.lon])      : null;
+  const destPos = destination ? (Array.isArray(destination) ? destination : [destination.lat, destination.lon]) : null;
 
-  // All positions for bounds fitting
-  const allPositions = [
-    source, destination,
+  const validRoute = routeCoordinates.filter(c => c && c[0] != null && c[1] != null);
+  const dashArray  = riskLevel === 'HIGH' ? '8 6' : riskLevel === 'MEDIUM' ? '12 5' : null;
+  const zoneColor  = riskLevel === 'HIGH' ? '#FF3B5C' : '#FFC857';
+
+  const allPositions = [srcPos, destPos,
     ...(validRoute.length > 0 ? [validRoute[0], validRoute[validRoute.length - 1]] : []),
   ].filter(Boolean);
-
-  // Unsafe zone pulse color
-  const zoneColor = riskLevel === 'HIGH' ? '#FF3B5C' : riskLevel === 'MEDIUM' ? '#FFC857' : '#FFC857';
 
   return (
     <MapContainer
@@ -109,72 +137,111 @@ export default function MapView({
       style={{ height: "100%", width: "100%", borderRadius: "1.5rem", background: "#0B1020" }}
       zoomControl={false}
     >
-      {/* Dark map tiles */}
       <TileLayer
         url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
       />
 
-      {/* Auto-fit */}
-      {!currentPosition && allPositions.length >= 2 && (
-        <FitBounds positions={allPositions} />
+      {/* Auto-fit or camera follow */}
+      {focusEscape && escapePoint ? (
+        <FocusPoint position={[escapePoint.lat, escapePoint.lon]} zoom={16} />
+      ) : currentPosition ? (
+        <CameraFollow position={currentPosition} />
+      ) : (
+        allPositions.length >= 2 && <FitBounds positions={allPositions} />
       )}
 
-      {/* Camera follow during trip */}
-      {currentPosition && <CameraFollow position={currentPosition} />}
-
-      {/* Route polyline */}
+      {/* Main route */}
       {validRoute.length >= 2 && (
-        <Polyline
-          positions={validRoute}
-          pathOptions={{ color: routeColor, weight: 5, opacity: 0.9, dashArray }}
-        />
+        <>
+          {/* Glow underlay */}
+          <Polyline positions={validRoute}
+            pathOptions={{ color: routeColor, weight: 10, opacity: 0.15, dashArray: null }} />
+          {/* Main line */}
+          <Polyline positions={validRoute}
+            pathOptions={{ color: routeColor, weight: 4.5, opacity: 0.95, dashArray }} />
+        </>
       )}
 
-      {/* Source marker */}
-      {source && (
-        <Marker position={source} icon={SOURCE_ICON}>
-          <Popup><b style={{ color: '#00E5FF' }}>Start</b></Popup>
+      {/* Alt routes (secondary) */}
+      {altRoutes.map((ar, i) => {
+        const valid = ar.coords?.filter(c => c && c[0] != null);
+        if (!valid?.length) return null;
+        return (
+          <Polyline key={i} positions={valid}
+            pathOptions={{ color: ar.color || '#888', weight: 3, opacity: 0.5, dashArray: '10 8' }} />
+        );
+      })}
+
+      {/* Escape route — bright green dashed line */}
+      {escapeRoute && escapeRoute.length >= 2 && (
+        <>
+          <Polyline positions={escapeRoute}
+            pathOptions={{ color: '#00FF9D', weight: 12, opacity: 0.12 }} />
+          <Polyline positions={escapeRoute}
+            pathOptions={{ color: '#00FF9D', weight: 3, opacity: 1, dashArray: '8 5' }} />
+        </>
+      )}
+
+      {/* ML-based danger zones */}
+      {showUnsafeZones && dangerZones.map((z, i) => {
+        const danger = z.score !== undefined ? (1 - z.score / 100) : 0.5;
+        const radius  = Math.max(150, Math.min(500, 150 + danger * 350));
+        const opacity = 0.08 + danger * 0.12;
+        return (
+          <React.Fragment key={i}>
+            <Circle center={[z.lat, z.lon]} radius={radius}
+              pathOptions={{ color: zoneColor, fillColor: zoneColor, fillOpacity: opacity, weight: 1.5 }} />
+            <Circle center={[z.lat, z.lon]} radius={radius * 0.45}
+              pathOptions={{ color: zoneColor, fillColor: zoneColor, fillOpacity: opacity + 0.1, weight: 0 }}>
+              <Popup><b style={{ color: zoneColor }}>{z.name || 'Risk Zone'}</b><br />
+                Safety score: {z.score ?? '—'}/100
+              </Popup>
+            </Circle>
+          </React.Fragment>
+        );
+      })}
+
+      {/* Safety anchor markers */}
+      {(['police', 'hospital', 'pharmacy']).flatMap(type =>
+        (safetyAnchors[type] || []).slice(0, 3).map((a, i) => (
+          <Marker key={`${type}-${i}`} position={[a.lat, a.lon]}
+            icon={ANCHOR_ICON_MAP[type] || makeIcon('#FFC857', 16)}>
+            <Popup>
+              <b>{type === 'police' ? '🚔' : type === 'hospital' ? '🏥' : '💊'} {a.name}</b>
+              <br />{a.distance_km} km away
+            </Popup>
+          </Marker>
+        ))
+      )}
+
+      {/* Escape point */}
+      {escapePoint && (
+        <Marker position={[escapePoint.lat, escapePoint.lon]} icon={ESCAPE_ICON} zIndexOffset={2000}>
+          <Popup>
+            <b style={{ color: '#00FF9D' }}>🛡 Recommended Escape Point</b><br />
+            {escapePoint.name}<br />
+            <span style={{ color: '#FFC857' }}>{escapePoint.distance_km} km · {escapePoint.category}</span>
+          </Popup>
         </Marker>
       )}
 
-      {/* Destination marker */}
-      {destination && (
-        <Marker position={destination} icon={DEST_ICON}>
-          <Popup><b style={{ color: '#00FF9D' }}>Destination</b></Popup>
-        </Marker>
-      )}
+      {/* Source / destination markers */}
+      {srcPos  && <Marker position={srcPos}  icon={SOURCE_ICON}><Popup><b style={{ color: '#00E5FF' }}>Start</b></Popup></Marker>}
+      {destPos && <Marker position={destPos} icon={DEST_ICON}>  <Popup><b style={{ color: '#00FF9D' }}>Destination</b></Popup></Marker>}
 
-      {/* Moving user marker */}
+      {/* Moving user position */}
       {currentPosition && (
         <Marker position={currentPosition} icon={getUserIcon(riskLevel)} zIndexOffset={1000}>
           <Popup>
-            <b style={{ color: riskLevel === 'HIGH' ? '#FF3B5C' : riskLevel === 'MEDIUM' ? '#FFC857' : '#00FF9D' }}>
+            <b style={{ color: riskLevel === 'HIGH' ? '#FF3B5C' : '#00FF9D' }}>
               You are here ({riskLevel} risk)
             </b>
           </Popup>
         </Marker>
       )}
 
-      {/* Unsafe zone circles (pulsing effect via two stacked circles) */}
-      {showUnsafeZones && UNSAFE_ZONES.map((z, i) => (
-        <React.Fragment key={i}>
-          <Circle
-            center={[z.lat, z.lon]}
-            radius={350}
-            pathOptions={{ color: zoneColor, fillColor: zoneColor, fillOpacity: 0.08, weight: 1.5 }}
-          />
-          <Circle
-            center={[z.lat, z.lon]}
-            radius={180}
-            pathOptions={{ color: zoneColor, fillColor: zoneColor, fillOpacity: 0.15, weight: 0 }}
-          >
-            <Popup><b style={{ color: zoneColor }}>{z.name}</b><br/>Community-reported unsafe area</Popup>
-          </Circle>
-        </React.Fragment>
-      ))}
-
-      {/* Extra markers (e.g. police, hospitals) */}
+      {/* Extra custom markers */}
       {markers.map((m, i) => (
         <Marker key={i} position={m.position} icon={makeIcon(m.color || '#FFC857', 16)}>
           {m.label && <Popup>{m.label}</Popup>}

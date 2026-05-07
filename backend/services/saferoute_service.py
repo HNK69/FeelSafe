@@ -29,6 +29,53 @@ from utils.location_utils import find_nearby, haversine_km
 from utils.constants import UNSAFE_ZONE_RADIUS_KM
 from models.feedback_model import get_route_stats
 
+
+def get_route_danger_segments(route: dict) -> list:
+    """
+    Extract dangerous waypoints from a scored route for ML-based rendering.
+    Returns a list of {lat, lon, score, name} — used by MapView dangerZones prop
+    and by anchor_service to search OSM around risky areas only.
+    """
+    waypoints = route.get("waypoints", [])
+    origin = route.get("origin", {})
+    dest   = route.get("destination", {})
+    all_points = [
+        {"lat": origin.get("lat"), "lon": origin.get("lon"), "label": "Origin"},
+        *[{"lat": w["lat"], "lon": w["lon"], "label": f"WP{i+1}"} for i, w in enumerate(waypoints)],
+        {"lat": dest.get("lat"), "lon": dest.get("lon"), "label": "Destination"},
+    ]
+
+    safety_score = route.get("safety_score", 50)
+    tags         = route.get("tags", [])
+    is_isolated  = route.get("is_isolated", False)
+
+    # Assign per-segment danger: isolated + low score = danger zone
+    danger_segments = []
+    for pt in all_points:
+        if pt["lat"] is None:
+            continue
+        # Local danger: isolated stretch or poor lighting tags + route score
+        local_danger = safety_score
+        if is_isolated:
+            local_danger -= 15
+        if "poor_lighting" in tags or "dark_stretch" in tags:
+            local_danger -= 10
+        if "isolated_stretch" in tags:
+            local_danger -= 10
+        local_danger = max(0, min(100, local_danger))
+
+        # Only expose as danger zone if score < 55
+        if local_danger < 55:
+            danger_segments.append({
+                "lat":   pt["lat"],
+                "lon":   pt["lon"],
+                "score": local_danger,
+                "name":  f"{route.get('name','Route')} — {pt['label']}",
+            })
+
+    return danger_segments
+
+
 # ── Load Static Data ──────────────────────────────────────────────────────────
 _BASE = os.path.dirname(os.path.abspath(__file__))
 _DATA = os.path.join(_BASE, "..", "data")

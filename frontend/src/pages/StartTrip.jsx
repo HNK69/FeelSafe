@@ -9,7 +9,7 @@ import {
 import MapView from '../components/MapView';
 import FeedbackModal from '../components/FeedbackModal';
 import EscalationModal from '../components/EscalationModal';
-import { getSafestRoute, startTrip, endTrip, analyzeThreat, analyzeVoice } from '../services/api';
+import { getSafestRoute, startTrip, endTrip, analyzeThreat, analyzeVoice, getSafetyAnchors } from '../services/api';
 
 const LOCATIONS = {
   'New Delhi Station':  { lat: 28.6429, lon: 77.2191 },
@@ -44,8 +44,11 @@ export default function StartTrip() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [showEscalation, setShowEscalation] = useState(false);
   const [escalationData, setEscalationData] = useState(null);
-  const [micState, setMicState]             = useState('idle'); // idle|recording|processing
+  const [micState, setMicState]             = useState('idle');
   const [micTranscript, setMicTranscript]   = useState('');
+  const [dangerZones, setDangerZones]       = useState([]);
+  const [safetyAnchors, setSafetyAnchors]   = useState({});
+  const [escapePoint, setEscapePoint]       = useState(null);
   const trackRef   = useRef(null);
   const wayptsRef  = useRef([]);
   const mediaRef   = useRef(null);
@@ -85,9 +88,23 @@ export default function StartTrip() {
       setCurrentPos(wps[0]);
       setStep(STEP.TRACKING);
       startSimulation(wps);
-    } catch (e) {
-      console.error(e);
-    }
+      // Set ML danger zones from route
+      setDangerZones(route.danger_segments || []);
+      // Auto-fetch safety anchors around midpoint for LOW safety routes
+      if ((route.safety_score || 100) < 60) {
+        const mid = wps[Math.floor(wps.length / 2)];
+        const anchorsRes = await getSafetyAnchors(mid[0], mid[1], 1500);
+        if (anchorsRes?.success) {
+          setSafetyAnchors(anchorsRes.anchors || {});
+          // Set escape point: prefer nearest police > hospital
+          const bestAnchor = [
+            ...(anchorsRes.anchors?.police   || []),
+            ...(anchorsRes.anchors?.hospital || []),
+          ].sort((a, b) => a.distance_km - b.distance_km)[0];
+          if (bestAnchor) setEscapePoint({ ...bestAnchor, category: bestAnchor.type || 'safety' });
+        }
+      }
+    } catch (e) { console.error(e); }
   };
 
   // ── Animated position simulation ───────────────────────────────────────────
@@ -166,22 +183,47 @@ export default function StartTrip() {
         stream.getTracks().forEach(t => t.stop());
         setMicState('processing');
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        const res  = await analyzeVoice(blob, {
+        const voiceRes = await analyzeVoice(blob, {
           tripId: activeTrip?.id,
           userId: 1,
           lat: currentPos?.[0] ?? src.lat,
           lon: currentPos?.[1] ?? src.lon,
         });
-        if (res.transcript) {
-          setMicTranscript(res.transcript);
-          setThreatInput(res.transcript);
-        }
-        if (res.risk_level) {
-          setThreatResult(res);
-          setLiveRisk(res.risk_level);
-          if ((res.risk_level === 'HIGH' || res.risk_level === 'MEDIUM') && res.auto_escalated) {
-            setEscalationData(res.escalation_result);
-            setShowEscalation(true);
+        const tx = voiceRes.transcript || '';
+        if (tx) {
+          setMicTranscript(tx);
+          setThreatInput(tx);
+          // Auto-run full threat analysis immediately
+          const threatRes = await analyzeThreat(tx,
+            currentPos?.[0] ?? src.lat,
+            currentPos?.[1] ?? src.lon,
+            1, 'FeelSafe User', activeTrip?.id,
+          );
+          setThreatResult(threatRes);
+          const risk = threatRes.risk_level || 'LOW';
+          setLiveRisk(risk);
+          if (risk === 'HIGH' || risk === 'MEDIUM') {
+            if (threatRes.auto_escalated) {
+              setEscalationData(threatRes.escalation_result);
+              setShowEscalation(true);
+            }
+            // Auto-fetch escape points on HIGH
+            if (risk === 'HIGH') {
+              const lat = currentPos?.[0] ?? src.lat;
+              const lon = currentPos?.[1] ?? src.lon;
+              const anchorsRes = await getSafetyAnchors(lat, lon, 1000);
+              if (anchorsRes?.success) {
+                setSafetyAnchors(anchorsRes.anchors || {});
+                const best = [
+                  ...(anchorsRes.anchors?.police   || []),
+                  ...(anchorsRes.anchors?.hospital || []),
+                ].sort((a, b) => a.distance_km - b.distance_km)[0];
+                if (best) setEscapePoint({ ...best, category: 'emergency' });
+              }
+              if (threatRes.escalation_result?.whatsapp_link) {
+                setTimeout(() => window.open(threatRes.escalation_result.whatsapp_link, '_blank'), 2500);
+              }
+            }
           }
         }
         setMicState('idle');
@@ -420,9 +462,27 @@ export default function StartTrip() {
                 ? allRoutes[0].waypoints.map(w => [w.lat, w.lon])
                 : []
             }
+            altRoutes={
+              step === STEP.ROUTES
+                ? allRoutes.slice(1).map((r, i) => ({
+                    coords: r.waypoints?.map(w => [w.lat, w.lon]) || [],
+                    color: r._badge || '#888',
+                    label: r._tag || `Option ${i + 2}`,
+                  }))
+                : []
+            }
             currentPosition={currentPos}
             routeColor={routeColor}
             riskLevel={liveRisk}
+            dangerZones={dangerZones}
+            safetyAnchors={safetyAnchors}
+            escapePoint={liveRisk === 'HIGH' ? escapePoint : null}
+            escapeRoute={
+              liveRisk === 'HIGH' && currentPos && escapePoint
+                ? [[currentPos[0], currentPos[1]], [escapePoint.lat, escapePoint.lon]]
+                : null
+            }
+            focusEscape={liveRisk === 'HIGH' && !!escapePoint}
           />
           {/* Radar ring during tracking */}
           {step === STEP.TRACKING && (

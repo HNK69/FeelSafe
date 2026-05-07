@@ -11,7 +11,7 @@ Endpoints:
 """
 
 from flask import Blueprint, request, jsonify
-from services.saferoute_service import get_safest_route, score_custom_route
+from services.saferoute_service import get_safest_route, score_custom_route, get_route_danger_segments
 from models.feedback_model import submit_feedback, get_route_stats, get_all_feedback_for_route
 from utils.helpers import error_response, require_fields
 
@@ -69,6 +69,10 @@ def api_safest_route():
 
     # Alternative routes = everything except the safest (top)
     alternative_routes = all_routes[1:] if len(all_routes) > 1 else []
+
+    # Annotate each route with danger_segments for MapView
+    for r in all_routes:
+        r['danger_segments'] = get_route_danger_segments(r)
 
     return jsonify({
         "success":            True,

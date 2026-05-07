@@ -345,7 +345,7 @@ export default function StartTrip() {
                       liveRisk === 'MEDIUM' ? '#FFC857' : '#00E5FF';
 
   return (
-    <div className="min-h-screen px-4 md:px-8 py-8 max-w-6xl mx-auto flex flex-col md:flex-row gap-6">
+    <div className="min-h-screen px-4 md:px-8 py-8 max-w-6xl mx-auto flex flex-col gap-6">
 
       {/* ── MODALS ──────────────────────────────────────────────────────────── */}
       {showFeedback && (
@@ -364,7 +364,10 @@ export default function StartTrip() {
         />
       )}
 
-      {/* ── LEFT PANEL ──────────────────────────────────────────────────────── */}
+      {/* ── MAIN 2-COL ROW ───────────────────────────────────────────────────── */}
+      <div className="flex flex-col md:flex-row gap-6">
+
+      {/* ── LEFT PANEL ───────────────────────────────────────────────────────── */}
       <div className="w-full md:w-2/5 flex flex-col gap-4">
 
         {/* Resume banner */}
@@ -654,45 +657,78 @@ export default function StartTrip() {
         </div>
       </div>
 
-      {/* ── NEARBY SAFETY PANEL (full width, below map+sidebar) ─────────────── */}
+      </div>{/* end main 2-col row */}
+
+      {/* ── NEARBY SAFETY PANEL ───────────────────────────────────────────────── */}
       {routeAnchors.length > 0 && (step === STEP.ROUTES || step === STEP.TRACKING) && (
         <motion.div
-          initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-          className="w-full glass rounded-3xl border border-[#00FF9D]/20 p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <MapPin className="w-4 h-4 text-[#00FF9D]" />
-            <h3 className="font-bold text-sm text-[#00FF9D]">Nearby Safety Along Your Route</h3>
-            <span className="ml-auto text-[10px] text-gray-500">{routeAnchors.length} places found · {srcKey} → {dstKey}</span>
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="w-full glass rounded-3xl border border-[#00FF9D]/20 overflow-hidden">
+
+          {/* Header */}
+          <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-800/60">
+            <div className="w-8 h-8 rounded-xl bg-[#00FF9D]/10 flex items-center justify-center">
+              <Shield className="w-4 h-4 text-[#00FF9D]" />
+            </div>
+            <div>
+              <h3 className="font-bold text-sm text-white">Nearby Safety Along Your Route</h3>
+              <p className="text-[11px] text-gray-500 mt-0.5">{srcKey} → {dstKey}</p>
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-xs text-gray-500">{routeAnchors.length} places</span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#00FF9D]/10 text-[#00FF9D] border border-[#00FF9D]/20">
+                Route-bound
+              </span>
+            </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
-            {routeAnchors.slice(0, 10).map((a, i) => {
+
+          {/* Scrollable cards */}
+          <div className="flex gap-3 overflow-x-auto px-6 py-4 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent"
+            style={{ scrollbarWidth: 'thin' }}>
+            {routeAnchors.slice(0, 12).map((a, i) => {
               const CFG = {
-                police:           { icon: '🚔', color: '#3B82F6', label: 'Police' },
-                hospital:         { icon: '🏥', color: '#EF4444', label: 'Hospital' },
-                pharmacy:         { icon: '💊', color: '#8B5CF6', label: 'Pharmacy' },
-                metro_station:    { icon: '🚇', color: '#F59E0B', label: 'Metro' },
-                public_safe_zone: { icon: '🛡', color: '#00FF9D', label: 'Safe Zone' },
-              }[a.category] || { icon: '📍', color: '#FFC857', label: a.category };
+                police:           { icon: '🚔', color: '#3B82F6', label: 'Police',    bg: '#3B82F610' },
+                hospital:         { icon: '🏥', color: '#EF4444', label: 'Hospital',  bg: '#EF444410' },
+                pharmacy:         { icon: '💊', color: '#8B5CF6', label: 'Pharmacy',  bg: '#8B5CF610' },
+                metro_station:    { icon: '🚇', color: '#F59E0B', label: 'Metro',     bg: '#F59E0B10' },
+                public_safe_zone: { icon: '🛡', color: '#00FF9D', label: 'Safe Zone', bg: '#00FF9D10' },
+              }[a.category] || { icon: '📍', color: '#FFC857', label: a.category, bg: '#FFC85710' };
               const navUrl = a.navigate_url || `https://www.google.com/maps/dir/?api=1&destination=${a.lat},${a.lon}`;
               return (
-                <div key={i} className="bg-black/30 border border-gray-800 hover:border-gray-600 rounded-xl p-2.5 flex flex-col gap-1.5 transition-colors">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm">{a.icon || CFG.icon}</span>
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-                      style={{ background: `${CFG.color}20`, color: CFG.color }}>
-                      {CFG.label}
-                    </span>
-                    {a.open_24x7 && <span className="text-[9px] text-[#00FF9D] ml-auto">24/7</span>}
+                <div key={i} className="flex-none w-44 rounded-2xl border border-gray-800 bg-black/30 overflow-hidden hover:border-gray-600 transition-all duration-200 group">
+                  {/* Color accent top bar */}
+                  <div className="h-1 w-full" style={{ background: CFG.color }} />
+                  <div className="p-3 flex flex-col gap-2.5">
+                    {/* Icon + category badge */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl leading-none">{a.icon || CFG.icon}</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                        style={{ background: CFG.bg, color: CFG.color }}>
+                        {CFG.label}
+                      </span>
+                      {a.open_24x7 && (
+                        <span className="ml-auto text-[9px] font-bold text-[#00FF9D] bg-[#00FF9D]/10 px-1.5 py-0.5 rounded-full">24/7</span>
+                      )}
+                    </div>
+                    {/* Name */}
+                    <div className="text-xs font-semibold text-white leading-snug line-clamp-2 min-h-[2.5rem]">
+                      {a.name}
+                    </div>
+                    {/* Distance */}
+                    <div className="flex items-center gap-1 text-[10px] text-gray-500">
+                      <MapPin className="w-3 h-3" />
+                      {a.distance_km} km away
+                    </div>
+                    {/* Navigate button */}
+                    <a href={navUrl} target="_blank" rel="noreferrer"
+                      className="flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[11px] font-bold transition-all duration-200 border"
+                      style={{ color: CFG.color, borderColor: `${CFG.color}40`, background: CFG.bg }}
+                      onMouseEnter={e => { e.currentTarget.style.background = CFG.color; e.currentTarget.style.color = '#000'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = CFG.bg; e.currentTarget.style.color = CFG.color; }}>
+                      🧭 Navigate
+                    </a>
                   </div>
-                  <div className="text-[11px] font-semibold text-white leading-tight line-clamp-2">{a.name}</div>
-                  <div className="text-[10px] text-gray-500">{a.distance_km} km away</div>
-                  <a href={navUrl} target="_blank" rel="noreferrer"
-                    className="text-[10px] font-bold px-2 py-1 rounded-lg text-center transition-colors mt-auto"
-                    style={{ background: '#00FF9D20', color: '#00FF9D', border: '1px solid #00FF9D40' }}
-                    onMouseEnter={e => { e.currentTarget.style.background='#00FF9D'; e.currentTarget.style.color='#000'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background='#00FF9D20'; e.currentTarget.style.color='#00FF9D'; }}>
-                    🧭 Navigate
-                  </a>
                 </div>
               );
             })}

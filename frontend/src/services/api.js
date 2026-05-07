@@ -157,3 +157,74 @@ export const getCommunityStats = (userId = 1) =>
     success: true,
     stats: { total_trips: 0, active_trips: 0, sos_alerts: 0, community_reports: 0, avg_safety_score: 72 },
   });
+
+// ── Voice ─────────────────────────────────────────────────────────────────────
+/**
+ * Upload an audio blob for Whisper transcription + threat analysis.
+ * Uses multipart/form-data (not JSON).
+ */
+export const analyzeVoice = async (audioBlob, { tripId, userId, lat, lon } = {}) => {
+  const form = new FormData();
+  form.append('audio', audioBlob, 'recording.webm');
+  if (tripId) form.append('trip_id', tripId);
+  if (userId) form.append('user_id', userId);
+  if (lat)    form.append('lat', lat);
+  if (lon)    form.append('lon', lon);
+  try {
+    const res = await fetch(`${API_BASE}/api/analyze-voice`, { method: 'POST', body: form });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error('[API] /api/analyze-voice failed:', err.message);
+    return { success: false, transcript: '', risk_level: 'LOW', error: err.message };
+  }
+};
+
+// ── Recordings ────────────────────────────────────────────────────────────────
+export const getRecordingsForTrip = (tripId) =>
+  apiCall(`/api/recordings/${tripId}`, {}, { success: true, recordings: [], count: 0 });
+
+export const getRecordingsForUser = (userId = 1, limit = 10) =>
+  apiCall(`/api/recordings/user/${userId}?limit=${limit}`, {}, { success: true, recordings: [], count: 0 });
+
+// ── Quick SOS ─────────────────────────────────────────────────────────────────
+export const quickSOS = (lat, lon, userId = 1, tripId = null, trigger = 'button') =>
+  apiCall('/api/quick-sos', {
+    method: 'POST',
+    body: JSON.stringify({ lat, lon, user_id: userId, trip_id: tripId, trigger }),
+  }, {
+    success: true,
+    escalation_level: 3,
+    whatsapp_link: `https://wa.me/?text=EMERGENCY`,
+    anchors: {},
+    auto_contacts_notified: [],
+  });
+
+// ── Safety Anchors ────────────────────────────────────────────────────────────
+export const getSafetyAnchors = (lat, lon, radiusM = 1000) =>
+  apiCall('/api/safety-anchors', {
+    method: 'POST',
+    body: JSON.stringify({ lat, lon, radius_m: radiusM }),
+  }, {
+    success: true,
+    anchors: { police: [], hospital: [], pharmacy: [], supermarket: [] },
+    total_found: 0,
+    nearest_police_km: null,
+    nearest_hospital_km: null,
+  });
+
+// ── Detailed Trip Feedback ────────────────────────────────────────────────────
+export const submitDetailedFeedback = (tripId, ratings, userId = 1) =>
+  apiCall('/api/trip-detailed-feedback', {
+    method: 'POST',
+    body: JSON.stringify({
+      trip_id:              tripId,
+      user_id:              userId,
+      safety_rating:        ratings.safety   ?? 3,
+      lighting_rating:      ratings.lighting  ?? 3,
+      crowd_rating:         ratings.crowd     ?? 3,
+      incident_reported:    ratings.incident  ?? false,
+      incident_description: ratings.incidentDesc ?? null,
+    }),
+  });
+

@@ -4,12 +4,12 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   MapPin, Navigation, Play, Square, Loader2,
-  BrainCircuit, AlertTriangle, ChevronRight, Shield, Clock, TrendingDown
+  BrainCircuit, AlertTriangle, ChevronRight, Shield, Clock, TrendingDown, Mic
 } from 'lucide-react';
 import MapView from '../components/MapView';
 import FeedbackModal from '../components/FeedbackModal';
 import EscalationModal from '../components/EscalationModal';
-import { getSafestRoute, startTrip, endTrip, analyzeThreat } from '../services/api';
+import { getSafestRoute, startTrip, endTrip, analyzeThreat, analyzeVoice } from '../services/api';
 
 const LOCATIONS = {
   'New Delhi Station':  { lat: 28.6429, lon: 77.2191 },
@@ -44,8 +44,12 @@ export default function StartTrip() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [showEscalation, setShowEscalation] = useState(false);
   const [escalationData, setEscalationData] = useState(null);
-  const trackRef  = useRef(null);
-  const wayptsRef = useRef([]);
+  const [micState, setMicState]             = useState('idle'); // idle|recording|processing
+  const [micTranscript, setMicTranscript]   = useState('');
+  const trackRef   = useRef(null);
+  const wayptsRef  = useRef([]);
+  const mediaRef   = useRef(null);
+  const chunksRef  = useRef([]);
 
   const src  = LOCATIONS[srcKey];
   const dest = LOCATIONS[dstKey];
@@ -150,6 +154,45 @@ export default function StartTrip() {
       setThreatInput('');
     }
   };
+
+  // ── Voice recording ────────────────────────────────────────────────────────
+  const startMic = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      chunksRef.current = [];
+      mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        setMicState('processing');
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const res  = await analyzeVoice(blob, {
+          tripId: activeTrip?.id,
+          userId: 1,
+          lat: currentPos?.[0] ?? src.lat,
+          lon: currentPos?.[1] ?? src.lon,
+        });
+        if (res.transcript) {
+          setMicTranscript(res.transcript);
+          setThreatInput(res.transcript);
+        }
+        if (res.risk_level) {
+          setThreatResult(res);
+          setLiveRisk(res.risk_level);
+          if ((res.risk_level === 'HIGH' || res.risk_level === 'MEDIUM') && res.auto_escalated) {
+            setEscalationData(res.escalation_result);
+            setShowEscalation(true);
+          }
+        }
+        setMicState('idle');
+      };
+      mr.start();
+      mediaRef.current = mr;
+      setMicState('recording');
+    } catch { setMicState('idle'); }
+  };
+
+  const stopMic = () => { mediaRef.current?.stop(); };
 
   useEffect(() => () => clearInterval(trackRef.current), []);
 
@@ -301,14 +344,37 @@ export default function StartTrip() {
                 <h3 className="font-bold mb-3 flex items-center gap-2 text-sm">
                   <AlertTriangle className="w-4 h-4 text-[#FFC857]" /> AI Threat Analysis
                 </h3>
+                {micTranscript && (
+                  <div className="mb-2 p-2 bg-[#7C4DFF]/10 border border-[#7C4DFF]/30 rounded-xl text-xs text-gray-300">
+                    <span className="text-[#7C4DFF] font-bold">Voice: </span>
+                    "{micTranscript.slice(0, 80)}{micTranscript.length > 80 ? '…' : ''}"
+                  </div>
+                )}
                 <textarea rows={2} value={threatInput} onChange={e => setThreatInput(e.target.value)}
-                  placeholder={`Describe situation...
-e.g. "Someone is following me"`}
+                  placeholder={`Describe situation...\ne.g. "Someone is following me"`}
                   className="w-full bg-black/50 border border-gray-700 rounded-xl p-3 text-sm text-white resize-none focus:outline-none focus:border-[#FFC857] mb-2" />
-                <button onClick={handleThreatAnalysis} disabled={analyzing || !threatInput.trim()}
-                  className="w-full py-2 rounded-xl text-sm font-bold bg-[#FFC857] text-black disabled:opacity-40 flex items-center justify-center gap-2">
-                  {analyzing ? <><Loader2 className="w-4 h-4 animate-spin" /> Analyzing...</> : 'Analyze Threat'}
-                </button>
+                <div className="flex gap-2">
+                  <button onClick={handleThreatAnalysis} disabled={analyzing || !threatInput.trim()}
+                    className="flex-1 py-2 rounded-xl text-sm font-bold bg-[#FFC857] text-black disabled:opacity-40 flex items-center justify-center gap-2">
+                    {analyzing ? <><Loader2 className="w-4 h-4 animate-spin" /> Analyzing...</> : 'Analyze'}
+                  </button>
+                  <button
+                    onClick={micState === 'recording' ? stopMic : startMic}
+                    disabled={micState === 'processing'}
+                    title={micState === 'recording' ? 'Stop recording' : 'Record voice'}
+                    className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-1 transition-all ${
+                      micState === 'recording'
+                        ? 'bg-[#FF3B5C] text-white animate-pulse'
+                        : micState === 'processing'
+                        ? 'bg-gray-700 text-gray-400'
+                        : 'bg-[#7C4DFF]/20 border border-[#7C4DFF]/50 text-[#7C4DFF] hover:bg-[#7C4DFF]/30'
+                    }`}>
+                    {micState === 'processing'
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                      : <Mic className={`w-4 h-4 ${micState === 'recording' ? 'fill-current' : ''}`} />}
+                  </button>
+                </div>
+
                 <AnimatePresence>
                   {threatResult && (
                     <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}

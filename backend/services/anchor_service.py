@@ -185,30 +185,37 @@ def get_safety_anchors(lat: float, lon: float,
     Guarantees: always returns results for any Delhi-area coordinate.
     """
     radius_km = radius_m / 1000.0
+    core_types = ["police", "hospital", "pharmacy"]
 
-    # ── Step 1: Local search (instant) ───────────────────────────────────────
+    # ── Step 1: Local search at requested radius ──────────────────────────────
     result = _local_search(lat, lon, radius_km, max_per_type)
 
-    # ── Step 2: Widen radius if local returns nothing ─────────────────────────
-    if not result:
-        wider_km = max(radius_km, 5.0)
-        result   = _local_search(lat, lon, wider_km, max_per_type)
+    # ── Step 2: For each missing CORE type, widen to 5 km automatically ───────
+    missing_core = [t for t in core_types if not result.get(t)]
+    if missing_core:
+        wider_km  = max(radius_km, 5.0)
+        wider_res = _local_search(lat, lon, wider_km, max_per_type)
+        for t in missing_core:
+            if wider_res.get(t):
+                result[t] = wider_res[t]
 
-    # ── Step 3: Supplement with OSM for any missing core types ───────────────
-    core_types   = ["police", "hospital", "pharmacy"]
-    missing_osm  = [t for t in core_types if not result.get(t)]
-    if missing_osm:
+    # ── Step 3: If still missing after local 5 km, try OSM (3s) ─────────────
+    still_missing = [t for t in core_types if not result.get(t)]
+    if still_missing:
         try:
-            osm_extra = _osm_supplement(lat, lon, radius_m, missing_osm)
+            osm_extra = _osm_supplement(lat, lon, max(radius_m, 5000), still_missing)
             for t, items in osm_extra.items():
-                if not result.get(t):      # only fill genuinely missing types
+                if not result.get(t):
                     result[t] = items
         except Exception:
             pass
 
-    # ── Final count ───────────────────────────────────────────────────────────
-    total = sum(len(v) for v in result.values())
+    # ── Step 4: Final safety net — ensure metro/safe_zone included if any ─────
+    if not result:
+        result = _local_search(lat, lon, 10.0, max_per_type)
 
+    # ── Final count ───────────────────────────────────────────────────────────
+    total         = sum(len(v) for v in result.values())
     police_list   = result.get("police",   [])
     hospital_list = result.get("hospital", [])
 
@@ -221,3 +228,4 @@ def get_safety_anchors(lat: float, lon: float,
         "search_radius_m":     radius_m,
         "center":              {"lat": lat, "lon": lon},
     }
+
